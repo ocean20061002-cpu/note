@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>stock - メモ＆タスク管理</title>
+<title>Note - メモ＆タスク管理</title>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <style>
@@ -1361,7 +1361,7 @@
 <div class="app">
   <!-- サイドバー -->
   <aside class="sidebar">
-    <h1>s<span>tock</span></h1>
+    <h1>N<span>ote</span></h1>
     <nav class="nav">
       <div class="nav-item active" data-view="dashboard">
         <span class="icon">▦</span><span>ダッシュボード</span>
@@ -1379,7 +1379,7 @@
       </div>
     </nav>
     <div class="sidebar-footer">
-      stock v1.0<br>
+      Note v1.0<br>
       ローカル保存・通知対応
     </div>
     <div class="sidebar-resizer" id="sidebar-resizer" title="ドラッグで幅を変更"></div>
@@ -1617,15 +1617,15 @@
 
 <script>
 // ====== ストレージ ======
-const STORAGE_KEY = 'stock_data_v1';
+const STORAGE_KEY = 'note_data_v1';
 let data = { memos: [], tasks: [], folders: [], folderOrder: [], lastNotified: {} };
 const UNFILED_ID = '__unfiled__';
 
 // ====== 自動バックアップ設定 ======
-let backupEnabled = localStorage.getItem('stock_backup_enabled') === '1';
-let backupTime = localStorage.getItem('stock_backup_time') || '22:00';
-let lastBackupDate = localStorage.getItem('stock_last_backup_date') || '';
-let lastBackupTime = localStorage.getItem('stock_last_backup_time') || '';
+let backupEnabled = localStorage.getItem('note_backup_enabled') === '1';
+let backupTime = localStorage.getItem('note_backup_time') || '22:00';
+let lastBackupDate = localStorage.getItem('note_last_backup_date') || '';
+let lastBackupTime = localStorage.getItem('note_last_backup_time') || '';
 
 function performAutoBackup(reason) {
   try {
@@ -1635,12 +1635,12 @@ function performAutoBackup(reason) {
       String(now.getDate()).padStart(2, '0');
     const timeStr = now.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const fname = `stock_backup_${dateKey.replace(/-/g, '')}.json`;
+    const fname = `note_backup_${dateKey.replace(/-/g, '')}.json`;
     triggerDownload(blob, fname);
     lastBackupDate = dateKey;
     lastBackupTime = timeStr;
-    localStorage.setItem('stock_last_backup_date', dateKey);
-    localStorage.setItem('stock_last_backup_time', timeStr);
+    localStorage.setItem('note_last_backup_date', dateKey);
+    localStorage.setItem('note_last_backup_time', timeStr);
     if (reason === 'manual') {
       toast('バックアップを保存しました', 'success');
     } else if (reason === 'auto') {
@@ -1676,13 +1676,13 @@ function checkAutoBackup() {
 }
 
 // ====== Google Drive 同期 ======
-const DRIVE_FILE_NAME = 'stock_data.json';
+const DRIVE_FILE_NAME = 'note_data.json';
 let driveAccessToken = null;
 let driveTokenExpires = 0;
 let driveTokenClient = null;
-let driveClientId = localStorage.getItem('stock_drive_client_id') || null;
-let driveFileId = localStorage.getItem('stock_drive_file_id') || null;
-let driveAutoSync = localStorage.getItem('stock_drive_auto') === '1';
+let driveClientId = localStorage.getItem('note_drive_client_id') || null;
+let driveFileId = localStorage.getItem('note_drive_file_id') || null;
+let driveAutoSync = localStorage.getItem('note_drive_auto') === '1';
 let driveSyncTimer = null;
 let driveGapiReady = false;
 
@@ -1746,9 +1746,9 @@ async function connectDrive(clientId) {
     toast('Drive へ接続中...', '');
     await getAccessToken(clientId, 'consent');
     driveClientId = clientId;
-    localStorage.setItem('stock_drive_client_id', clientId);
+    localStorage.setItem('note_drive_client_id', clientId);
 
-    // 既存の stock_data.json を検索
+    // 既存の note_data.json を検索
     const find = await gapi.client.drive.files.list({
       q: `name='${DRIVE_FILE_NAME}' and trashed=false`,
       spaces: 'drive',
@@ -1756,7 +1756,7 @@ async function connectDrive(clientId) {
     });
     if (find.result.files && find.result.files.length > 0) {
       driveFileId = find.result.files[0].id;
-      localStorage.setItem('stock_drive_file_id', driveFileId);
+      localStorage.setItem('note_drive_file_id', driveFileId);
       // Drive 側を取得して既存データとマージ
       const useRemote = confirm('Drive に既存データが見つかりました。\n\n「OK」: Drive のデータをこのPCに取り込む\n「キャンセル」: このPCのデータで Drive を上書き');
       if (useRemote) {
@@ -1771,12 +1771,12 @@ async function connectDrive(clientId) {
         fields: 'id'
       });
       driveFileId = create.result.id;
-      localStorage.setItem('stock_drive_file_id', driveFileId);
+      localStorage.setItem('note_drive_file_id', driveFileId);
       await pushToDrive();
     }
 
     driveAutoSync = true;
-    localStorage.setItem('stock_drive_auto', '1');
+    localStorage.setItem('note_drive_auto', '1');
     toast('Drive と接続しました', 'success');
     render();
   } catch (e) {
@@ -1844,9 +1844,9 @@ function disconnectDrive() {
   driveClientId = null;
   driveFileId = null;
   driveAutoSync = false;
-  localStorage.removeItem('stock_drive_client_id');
-  localStorage.removeItem('stock_drive_file_id');
-  localStorage.removeItem('stock_drive_auto');
+  localStorage.removeItem('note_drive_client_id');
+  localStorage.removeItem('note_drive_file_id');
+  localStorage.removeItem('note_drive_auto');
   toast('Drive 連携を解除しました', 'warning');
   render();
 }
@@ -1925,17 +1925,17 @@ let currentView = 'dashboard';
 let currentSearch = '';
 let currentFilter = 'all';
 // メモ画面: フォルダ絞り込み（'all' | 'unfiled' | folderId）
-let currentFolder = localStorage.getItem('stock_current_folder') || 'all';
+let currentFolder = localStorage.getItem('note_current_folder') || 'all';
 // メモ画面: タグ検索モード（'include' = 選択タグを含む / 'exclude' = 選択タグを除外）
-let currentTagMode = localStorage.getItem('stock_tag_mode') || 'include';
+let currentTagMode = localStorage.getItem('note_tag_mode') || 'include';
 // メモ画面: 折りたたみ済みフォルダのIDセット（'__unfiled__' で全般＝フォルダ未指定）
 let collapsedFolders = new Set();
 try {
-  const raw = localStorage.getItem('stock_collapsed_folders');
+  const raw = localStorage.getItem('note_collapsed_folders');
   if (raw) collapsedFolders = new Set(JSON.parse(raw));
 } catch(e) {}
 function saveCollapsedFolders() {
-  localStorage.setItem('stock_collapsed_folders', JSON.stringify([...collapsedFolders]));
+  localStorage.setItem('note_collapsed_folders', JSON.stringify([...collapsedFolders]));
 }
 document.querySelectorAll('.nav-item').forEach(item => {
   item.addEventListener('click', () => {
@@ -2544,12 +2544,12 @@ function linkifyContent(rootEl) {
 }
 
 // 直近に使った色（次に開いた時に表示する用）
-let lastTextColor = localStorage.getItem('stock_last_text_color') || '#e74c3c';
-let lastBgColor = localStorage.getItem('stock_last_bg_color') || '#fff59d';
-let lastCellColor = localStorage.getItem('stock_last_cell_color') || '#fff59d';
+let lastTextColor = localStorage.getItem('note_last_text_color') || '#e74c3c';
+let lastBgColor = localStorage.getItem('note_last_bg_color') || '#fff59d';
+let lastCellColor = localStorage.getItem('note_last_cell_color') || '#fff59d';
 
 // メモ画面のタスクパネル開閉状態
-let memoTasksPanelCollapsed = localStorage.getItem('stock_mtp_collapsed') === '1';
+let memoTasksPanelCollapsed = localStorage.getItem('note_mtp_collapsed') === '1';
 // メモ画面のタスクパネル: 表示件数の制限と対象メモ
 const MEMO_TASKS_INITIAL = 3;
 const MEMO_TASKS_STEP = 3;
@@ -2704,7 +2704,7 @@ function renderFolderList() {
       // 現在の絞り込みが消えたフォルダなら 'all' に戻す
       if (currentFolder === id) {
         currentFolder = 'all';
-        localStorage.setItem('stock_current_folder', currentFolder);
+        localStorage.setItem('note_current_folder', currentFolder);
       }
       save();
       toast('フォルダを削除しました', 'danger');
@@ -3058,7 +3058,7 @@ function setupMemoListResize() {
   const handle = document.getElementById('memo-resize-handle');
   if (!pane || !handle) return;
   // 保存された幅を復元
-  const saved = parseInt(localStorage.getItem('stock_memo_list_width'));
+  const saved = parseInt(localStorage.getItem('note_memo_list_width'));
   if (saved && saved >= 30 && saved <= 800) {
     pane.style.width = saved + 'px';
   }
@@ -3080,7 +3080,7 @@ function setupMemoListResize() {
     document.body.classList.remove('resizing');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    localStorage.setItem('stock_memo_list_width', parseInt(pane.style.width));
+    localStorage.setItem('note_memo_list_width', parseInt(pane.style.width));
   };
   handle.addEventListener('mousedown', (e) => {
     isDragging = true;
@@ -3095,7 +3095,7 @@ function setupMemoListResize() {
   // ダブルクリックで初期幅(280px)に戻す
   handle.addEventListener('dblclick', () => {
     pane.style.width = '280px';
-    localStorage.setItem('stock_memo_list_width', 280);
+    localStorage.setItem('note_memo_list_width', 280);
     toast('メモ一覧幅をリセットしました', 'success');
   });
 }
@@ -3288,7 +3288,7 @@ function bindMemoTasksPanel() {
   const toggle = document.getElementById('mtp-toggle');
   if (toggle) toggle.onclick = () => {
     memoTasksPanelCollapsed = !memoTasksPanelCollapsed;
-    localStorage.setItem('stock_mtp_collapsed', memoTasksPanelCollapsed ? '1' : '0');
+    localStorage.setItem('note_mtp_collapsed', memoTasksPanelCollapsed ? '1' : '0');
     const panel = document.getElementById('memo-tasks-panel');
     panel.classList.toggle('collapsed', memoTasksPanelCollapsed);
     toggle.textContent = memoTasksPanelCollapsed ? '▸' : '▾';
@@ -3404,7 +3404,7 @@ function bindMemoView() {
   const mpTagMode = document.getElementById('mp-tag-mode');
   if (mpTagMode) mpTagMode.addEventListener('click', () => {
     currentTagMode = currentTagMode === 'exclude' ? 'include' : 'exclude';
-    localStorage.setItem('stock_tag_mode', currentTagMode);
+    localStorage.setItem('note_tag_mode', currentTagMode);
     render();
   });
   // フォルダ管理ボタン
@@ -4176,7 +4176,7 @@ function bindMemoView() {
         }
         lastCellColor = e.target.value;
         if (cellColorSwatch) cellColorSwatch.style.background = lastCellColor;
-        localStorage.setItem('stock_last_cell_color', lastCellColor);
+        localStorage.setItem('note_last_cell_color', lastCellColor);
         const tbl = currentTableCell.closest('table');
         const row = currentTableCell.parentElement;
         const colIdx = Array.from(row.children).indexOf(currentTableCell);
@@ -4234,7 +4234,7 @@ function bindMemoView() {
       textColorInput.addEventListener('input', e => {
         lastTextColor = e.target.value;
         if (indText) indText.style.background = lastTextColor;
-        localStorage.setItem('stock_last_text_color', lastTextColor);
+        localStorage.setItem('note_last_text_color', lastTextColor);
         applyCmd('foreColor', lastTextColor);
       });
     }
@@ -4243,7 +4243,7 @@ function bindMemoView() {
       bgColorInput.addEventListener('input', e => {
         lastBgColor = e.target.value;
         if (indBg) indBg.style.background = lastBgColor;
-        localStorage.setItem('stock_last_bg_color', lastBgColor);
+        localStorage.setItem('note_last_bg_color', lastBgColor);
         applyCmd('hiliteColor', lastBgColor);
       });
     }
@@ -4720,19 +4720,19 @@ function renderSettings() {
           <div style="margin-top:10px; line-height:1.8; padding: 10px; background: var(--bg); border-radius: 4px;">
             <p style="font-weight:600; margin-bottom:6px;">事前準備:</p>
             <p style="color: var(--warning); margin-bottom:8px;">⚠ <strong>file:// では認証できません。</strong>以下のいずれかでホスティング後に設定してください:<br>
-            ・ローカルサーバー (例: <code>python -m http.server 8000</code> → http://localhost:8000/stock.html)<br>
+            ・ローカルサーバー (例: <code>python -m http.server 8000</code> → http://localhost:8000/index.html)<br>
             ・GitHub Pages や Netlify などの静的ホスティング</p>
             <p style="font-weight:600; margin-top:10px; margin-bottom:6px;">Google Cloud Console の設定:</p>
             <ol style="margin-left:24px;">
               <li><a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> にアクセス</li>
               <li>新しいプロジェクトを作成</li>
               <li>「APIとサービス」→「ライブラリ」で <strong>Google Drive API</strong> を有効化</li>
-              <li>「OAuth同意画面」で「外部」を選択し、テストユーザーに自分のメール (${escape(localStorage.getItem('stock_email') || 'ocean.20061002@gmail.com')}) を追加</li>
+              <li>「OAuth同意画面」で「外部」を選択し、テストユーザーに自分のメール (${escape(localStorage.getItem('note_email') || 'ocean.20061002@gmail.com')}) を追加</li>
               <li>「認証情報」→「OAuth クライアント ID 作成」→「ウェブアプリケーション」</li>
               <li><strong>承認済み JavaScript 生成元</strong>に <code style="background:white; padding:2px 4px;">${escape(origin)}</code> を追加</li>
               <li>作成された<strong>クライアント ID</strong>をコピーして上の入力欄に貼り付け、「接続」をクリック</li>
             </ol>
-            <p style="margin-top:10px;">ファイル名: <code>stock_data.json</code> として Drive 上に保存されます。</p>
+            <p style="margin-top:10px;">ファイル名: <code>note_data.json</code> として Drive 上に保存されます。</p>
           </div>
         </details>
       </div>
@@ -4816,13 +4816,13 @@ function bindSettingsButtons() {
   const bEnable = document.getElementById('backup-enable');
   if (bEnable) bEnable.onchange = e => {
     backupEnabled = e.target.checked;
-    localStorage.setItem('stock_backup_enabled', backupEnabled ? '1' : '0');
+    localStorage.setItem('note_backup_enabled', backupEnabled ? '1' : '0');
     toast(backupEnabled ? '自動バックアップを有効にしました' : '自動バックアップを無効にしました', 'success');
   };
   const bTime = document.getElementById('backup-time');
   if (bTime) bTime.onchange = e => {
     backupTime = e.target.value || '22:00';
-    localStorage.setItem('stock_backup_time', backupTime);
+    localStorage.setItem('note_backup_time', backupTime);
     toast(`バックアップ時刻を ${backupTime} に変更しました`, 'success');
   };
   const bNow = document.getElementById('backup-now');
@@ -4831,7 +4831,7 @@ function bindSettingsButtons() {
 
 function exportJSON() {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  triggerDownload(blob, `stock_backup_${dateStr()}.json`);
+  triggerDownload(blob, `note_backup_${dateStr()}.json`);
   toast('JSONを書き出しました', 'success');
 }
 function exportCSV(kind) {
@@ -4853,7 +4853,7 @@ function exportCSV(kind) {
   }
   // BOM付与でExcelの文字化け回避
   const blob = new Blob(['﻿' + csv], { type: 'text/csv' });
-  triggerDownload(blob, `stock_${kind}_${dateStr()}.csv`);
+  triggerDownload(blob, `note_${kind}_${dateStr()}.csv`);
   toast('CSVを書き出しました', 'success');
 }
 function csvEsc(s) {
@@ -4942,7 +4942,7 @@ function checkDueTasks() {
     if (overdue > 0) body += `期限超過: ${overdue}件 `;
     if (soon > 0) body += `期限間近: ${soon}件`;
     try {
-      new Notification('stock - タスクの期限', { body: body.trim() + '\n最初: ' + targets[0].title, icon: '' });
+      new Notification('Note - タスクの期限', { body: body.trim() + '\n最初: ' + targets[0].title, icon: '' });
     } catch(e) { console.warn(e); }
   }
   data.lastNotified = { date: todayStr };
@@ -4962,7 +4962,7 @@ function updateBadges() {
 (function setupSidebarResize() {
   const sidebar = document.querySelector('.sidebar');
   const resizer = document.getElementById('sidebar-resizer');
-  const SIDEBAR_WIDTH_KEY = 'stock_sidebar_width';
+  const SIDEBAR_WIDTH_KEY = 'note_sidebar_width';
   // 保存済みの幅を復元
   const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY);
   if (savedWidth) sidebar.style.width = savedWidth + 'px';
