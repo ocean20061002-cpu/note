@@ -570,6 +570,14 @@
   .cal-event.done { background: #e8f8f5; color: var(--success); border-left-color: var(--success); text-decoration: line-through; }
   .cal-event.overdue { background: #fdecea; color: var(--danger); border-left-color: var(--danger); }
   .cal-event.high { font-weight: 600; }
+  /* 確定の予定（イベント） - 暗い青で表示 */
+  .cal-event.fixed {
+    background: #dbeafe;
+    color: #1e3a8a;
+    border-left: 2px solid #1e3a8a;
+    font-weight: 600;
+  }
+  .cal-event.fixed::before { content: '📌 '; }
   .cal-more { font-size: 10px; color: var(--text-muted); }
   .cal-day-detail {
     background: var(--card-bg);
@@ -1543,11 +1551,19 @@
         <option value="monthly">毎月◯日</option>
         <option value="yearly">毎年◯月◯日</option>
         <option value="after_completion">完了ボタンから◯日後</option>
+        <option value="monthly_eom_business">月末平日の◯営業日前</option>
       </select>
     </div>
     <div class="form-group" id="recur-monthly-row" style="display:none;">
       <label>毎月の日付</label>
       <input type="number" id="task-recur-day" min="1" max="31" value="1" style="width:120px;"> 日
+    </div>
+    <div class="form-group" id="recur-eom-row" style="display:none;">
+      <label>月末平日（その月の最終営業日）から何営業日前か</label>
+      <input type="number" id="task-recur-eom-days" min="0" max="30" value="0" style="width:120px;"> 営業日前
+      <div style="font-size:11px; color: var(--text-muted); margin-top:4px;">
+        例: 0 = 月末平日当日 / 1 = その1営業日前 / 3 = 3営業日前
+      </div>
     </div>
     <div class="form-row" id="recur-yearly-row" style="display:none;">
       <div class="form-group">
@@ -1569,9 +1585,14 @@
       <input type="number" id="task-recur-after" min="1" max="365" value="7" style="width:120px;"> 日後
     </div>
     <div class="form-group" id="recur-shift-row" style="display:none;">
-      <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; font-size:13px; line-height:1;">
+      <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; font-size:13px; line-height:1; margin-bottom:6px;">
         <input type="checkbox" id="task-recur-shift" style="margin:0; width:14px; height:14px; flex-shrink:0;">
         <span>土日・祝日に重なる場合は前の平日に自動的に移動する</span>
+      </label>
+      <br>
+      <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; font-size:13px; line-height:1;">
+        <input type="checkbox" id="task-recur-shift-after" style="margin:0; width:14px; height:14px; flex-shrink:0;">
+        <span>土日・祝日に重なる場合は次の平日に自動的に移動する</span>
       </label>
     </div>
     <div class="form-group">
@@ -1586,6 +1607,75 @@
       <button class="btn btn-danger" id="task-delete" style="display:none">削除</button>
       <button class="btn btn-secondary" id="task-cancel">キャンセル</button>
       <button class="btn btn-primary" id="task-save">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 予定（イベント）編集モーダル -->
+<div class="modal-bg" id="event-modal">
+  <div class="modal" style="max-width: 480px;">
+    <h2 id="event-modal-title">📌 新規予定</h2>
+    <div class="form-group">
+      <label>予定名</label>
+      <input type="text" id="event-title" placeholder="例: 給与日 / 出張 / 健康診断">
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>開始日</label>
+        <input type="date" id="event-start">
+      </div>
+      <div class="form-group">
+        <label>終了日（同じなら空でOK）</label>
+        <input type="date" id="event-end">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>繰り返し</label>
+      <select id="event-recur-type">
+        <option value="none">なし（1回限り）</option>
+        <option value="monthly">毎月◯日</option>
+        <option value="yearly">毎年◯月◯日</option>
+        <option value="monthly_eom_business">月末平日の◯営業日前</option>
+      </select>
+    </div>
+    <div class="form-group" id="event-recur-monthly-row" style="display:none;">
+      <label>毎月の日付</label>
+      <input type="number" id="event-recur-day" min="1" max="31" value="1" style="width:120px;"> 日
+    </div>
+    <div class="form-row" id="event-recur-yearly-row" style="display:none;">
+      <div class="form-group">
+        <label>月</label>
+        <select id="event-recur-month">
+          <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+          <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+          <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+          <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>日</label>
+        <input type="number" id="event-recur-yday" min="1" max="31" value="1">
+      </div>
+    </div>
+    <div class="form-group" id="event-recur-eom-row" style="display:none;">
+      <label>月末平日（その月の最終営業日）から何営業日前か</label>
+      <input type="number" id="event-recur-eom-days" min="0" max="30" value="0" style="width:120px;"> 営業日前
+    </div>
+    <div class="form-group" id="event-recur-shift-row" style="display:none;">
+      <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; font-size:13px; line-height:1; margin-bottom:6px;">
+        <input type="checkbox" id="event-recur-shift" style="margin:0; width:14px; height:14px; flex-shrink:0;">
+        <span>土日・祝日に重なる場合は前の平日に自動的に移動する</span>
+      </label>
+      <br>
+      <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; font-size:13px; line-height:1;">
+        <input type="checkbox" id="event-recur-shift-after" style="margin:0; width:14px; height:14px; flex-shrink:0;">
+        <span>土日・祝日に重なる場合は次の平日に自動的に移動する</span>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="event-delete" style="display:none">削除</button>
+      <button class="btn btn-secondary" id="event-cancel">キャンセル</button>
+      <button class="btn btn-primary" id="event-save">保存</button>
     </div>
   </div>
 </div>
@@ -1722,7 +1812,7 @@
 <script>
 // ====== ストレージ ======
 const STORAGE_KEY = 'note_data_v1';
-let data = { memos: [], tasks: [], folders: [], folderOrder: [], devices: [], lastNotified: {} };
+let data = { memos: [], tasks: [], folders: [], folderOrder: [], devices: [], events: [], lastNotified: {} };
 const UNFILED_ID = '__unfiled__';
 
 // ====== デバイス（このPC）の識別 ======
@@ -1979,10 +2069,11 @@ async function syncFromDrive(showToast) {
     if (!res.ok) throw new Error('download failed: ' + res.status);
     const remote = await res.json();
     if (!remote || typeof remote !== 'object') throw new Error('invalid data');
-    data = Object.assign({ memos: [], tasks: [], folders: [], folderOrder: [], devices: [], lastNotified: {} }, remote);
+    data = Object.assign({ memos: [], tasks: [], folders: [], folderOrder: [], devices: [], events: [], lastNotified: {} }, remote);
     if (!Array.isArray(data.folders)) data.folders = [];
     if (!Array.isArray(data.folderOrder)) data.folderOrder = [];
     if (!Array.isArray(data.devices)) data.devices = [];
+    if (!Array.isArray(data.events)) data.events = [];
     ensureFolderOrder();
     registerCurrentDevice();
     saveLocalOnly();
@@ -2032,6 +2123,7 @@ function load() {
   if (!Array.isArray(data.folders)) data.folders = [];
   if (!Array.isArray(data.folderOrder)) data.folderOrder = [];
   if (!Array.isArray(data.devices)) data.devices = [];
+  if (!Array.isArray(data.events)) data.events = [];
   ensureFolderOrder();
   registerCurrentDevice();
   // 旧形式 memoId（単一）を新形式 memoIds（複数）に移行
@@ -2278,6 +2370,77 @@ function renderDashboard() {
   `;
 }
 
+// 予定（イベント）の出現日を計算: 指定範囲に含まれる occurrences を {event, startDate, endDate} で返す
+function getEventOccurrencesInRange(rangeStart, rangeEnd) {
+  const results = [];
+  // 範囲は YYYY-MM-DD 文字列で比較する（タイムゾーンずれ防止）
+  const rangeStartKey = formatDateKey(rangeStart);
+  const rangeEndKey = formatDateKey(rangeEnd);
+  (data.events || []).forEach(ev => {
+    if (!ev.startDate) return;
+    const evStart = parseLocalDate(ev.startDate);
+    const evEnd = ev.endDate ? parseLocalDate(ev.endDate) : parseLocalDate(ev.startDate);
+    const durationDays = Math.max(0, Math.round((evEnd - evStart) / 86400000));
+    const rec = ev.recurrence || { type: 'none' };
+    if (!rec.type || rec.type === 'none') {
+      const evStartKey = ev.startDate;
+      const evEndKey = ev.endDate || ev.startDate;
+      // 範囲との重なり判定
+      if (evEndKey >= rangeStartKey && evStartKey <= rangeEndKey) {
+        results.push({ event: ev, startDate: evStartKey, endDate: evEndKey });
+      }
+      return;
+    }
+    // 繰り返しあり: 元の開始日から順に展開
+    let cursorKey = ev.startDate;
+    let cursor = parseLocalDate(cursorKey);
+    // 元のインスタンス
+    if (cursorKey <= rangeEndKey) {
+      const occEnd = new Date(cursor); occEnd.setDate(occEnd.getDate() + durationDays);
+      const occEndKey = formatDateKey(occEnd);
+      if (occEndKey >= rangeStartKey) {
+        results.push({ event: ev, startDate: cursorKey, endDate: occEndKey });
+      }
+    }
+    // 続くインスタンス
+    let safety = 0;
+    while (safety < 200) {
+      const nextStr = calcNextDue(rec, cursorKey);
+      if (!nextStr) break;
+      if (nextStr > rangeEndKey) break;
+      const next = parseLocalDate(nextStr);
+      const nextEnd = new Date(next); nextEnd.setDate(nextEnd.getDate() + durationDays);
+      const nextEndKey = formatDateKey(nextEnd);
+      if (nextEndKey >= rangeStartKey) {
+        results.push({ event: ev, startDate: nextStr, endDate: nextEndKey });
+      }
+      cursorKey = nextStr;
+      cursor = next;
+      safety++;
+    }
+  });
+  return results;
+}
+// 日付ごとのイベントマップを構築（同一イベントの重複は1日1回まで）
+function buildEventsByDate(rangeStart, rangeEnd) {
+  const map = {};
+  const occs = getEventOccurrencesInRange(rangeStart, rangeEnd);
+  occs.forEach(occ => {
+    let cur = parseLocalDate(occ.startDate);
+    const end = parseLocalDate(occ.endDate);
+    while (cur <= end) {
+      const key = formatDateKey(cur);
+      if (!map[key]) map[key] = [];
+      // 同じ日に同じイベントIDが既にあればスキップ（重複防止）
+      if (!map[key].some(e => e.id === occ.event.id)) {
+        map[key].push(occ.event);
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  });
+  return map;
+}
+
 function renderCalendar() {
   const today = new Date(); today.setHours(0,0,0,0);
   const todayKey = formatDateKey(today);
@@ -2293,6 +2456,10 @@ function renderCalendar() {
     if (!tasksByDate[t.due]) tasksByDate[t.due] = [];
     tasksByDate[t.due].push(t);
   });
+  // 予定（繰り返し展開込み）を日付ごとにマップ化（前後月も含む広範囲で）
+  const calRangeStart = new Date(calYear, calMonth - 1, 1);
+  const calRangeEnd = new Date(calYear, calMonth + 2, 0);
+  const eventsByDate = buildEventsByDate(calRangeStart, calRangeEnd);
 
   const dayNames = ['日','月','火','水','木','金','土'];
   let cellsHTML = dayNames.map((n, i) => {
@@ -2327,18 +2494,30 @@ function renderCalendar() {
     else if (dow === 6) dateCls = ' sat';
     const isToday = key === todayKey;
     const isSelected = key === calSelectedDate;
-    const events = tasksByDate[key] || [];
+    const dayTasks = tasksByDate[key] || [];
+    const dayEvents = eventsByDate[key] || [];
     let eventsHTML = '';
     const showCount = 3;
-    events.slice(0, showCount).forEach(t => {
+    // 予定（イベント）を先に表示（暗い青）
+    let shown = 0;
+    dayEvents.forEach(ev => {
+      if (shown >= showCount) return;
+      eventsHTML += `<div class="cal-event fixed" title="${escape(ev.title)}">${escape(ev.title)}</div>`;
+      shown++;
+    });
+    // 続いてタスクを表示
+    dayTasks.forEach(t => {
+      if (shown >= showCount) return;
       let cls = 'cal-event';
       if (t.status === 'done') cls += ' done';
       else if (new Date(key) < today) cls += ' overdue';
       if (t.priority === 'high') cls += ' high';
       eventsHTML += `<div class="${cls}" title="${escape(t.title)}">${escape(t.title)}</div>`;
+      shown++;
     });
-    if (events.length > showCount) {
-      eventsHTML += `<div class="cal-more">他 ${events.length - showCount} 件</div>`;
+    const total = dayEvents.length + dayTasks.length;
+    if (total > showCount) {
+      eventsHTML += `<div class="cal-more">他 ${total - showCount} 件</div>`;
     }
     // 背景色クラス（土曜：薄い青、日祝：薄い赤）
     let bgCls = '';
@@ -2383,21 +2562,53 @@ function renderCalendar() {
 
 function renderSelectedDayDetail() {
   if (!calSelectedDate) return '';
-  const events = data.tasks.filter(t => t.due === calSelectedDate)
+  const tasks = data.tasks.filter(t => t.due === calSelectedDate)
     .sort((a,b) => (a.status === 'done') - (b.status === 'done'));
+  // この日の予定（イベント）を取得（同一イベントは1回のみ表示）
+  const dayDate = parseLocalDate(calSelectedDate);
+  const rawOccs = getEventOccurrencesInRange(dayDate, dayDate);
+  const seenIds = new Set();
+  const eventOccs = rawOccs.filter(occ => {
+    if (seenIds.has(occ.event.id)) return false;
+    seenIds.add(occ.event.id);
+    return true;
+  });
   const dateObj = new Date(calSelectedDate);
   const dateLabel = `${dateObj.getFullYear()}年${dateObj.getMonth()+1}月${dateObj.getDate()}日 (${['日','月','火','水','木','金','土'][dateObj.getDay()]})`;
-  if (events.length === 0) {
-    return `<div class="cal-day-detail">
-      <h4>📅 ${dateLabel}</h4>
-      <div style="color: var(--text-muted); font-size: 13px;">この日のタスクはありません。</div>
-      <button class="btn btn-primary btn-small" id="cal-add-task" style="margin-top:8px;">この日のタスクを追加</button>
+  // 予定セクション
+  let eventSectionHTML = '';
+  if (eventOccs.length > 0) {
+    eventSectionHTML = `<div style="margin-bottom:10px;">
+      <div style="font-size:12px; color:#1e3a8a; font-weight:600; margin-bottom:4px;">📌 予定 (${eventOccs.length}件)</div>
+      <div style="display:flex; flex-direction:column; gap:4px;">
+        ${eventOccs.map(occ => {
+          const isMulti = occ.startDate !== occ.endDate;
+          const span = isMulti ? `（${occ.startDate.slice(5).replace('-','/')}～${occ.endDate.slice(5).replace('-','/')}）` : '';
+          return `<div class="event-row" data-event-id="${escape(occ.event.id)}" style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:#dbeafe; border-left:3px solid #1e3a8a; border-radius:4px; cursor:pointer;">
+            <span style="color:#1e3a8a; font-weight:600; font-size:13px; flex:1;">📌 ${escape(occ.event.title)}<span style="font-weight:400; opacity:0.8; margin-left:6px;">${span}</span></span>
+          </div>`;
+        }).join('')}
+      </div>
     </div>`;
   }
+  // タスクセクション
+  let taskSectionHTML = '';
+  if (tasks.length > 0) {
+    taskSectionHTML = `<div>
+      <div style="font-size:12px; color:var(--warning); font-weight:600; margin-bottom:4px;">📋 タスク (${tasks.length}件)</div>
+      <div class="card-grid">${tasks.map(taskCardHTML).join('')}</div>
+    </div>`;
+  } else if (eventOccs.length === 0) {
+    taskSectionHTML = `<div style="color: var(--text-muted); font-size: 13px;">この日のタスク・予定はありません。</div>`;
+  }
   return `<div class="cal-day-detail">
-    <h4>📅 ${dateLabel}（${events.length}件）</h4>
-    <div class="card-grid">${events.map(taskCardHTML).join('')}</div>
-    <button class="btn btn-primary btn-small" id="cal-add-task" style="margin-top:10px;">この日のタスクを追加</button>
+    <h4>📅 ${dateLabel}</h4>
+    ${eventSectionHTML}
+    ${taskSectionHTML}
+    <div style="display:flex; gap:8px; margin-top:10px;">
+      <button class="btn btn-primary btn-small" id="cal-add-task">＋ この日のタスクを追加</button>
+      <button class="btn btn-small" id="cal-add-event" style="background:#1e3a8a; color:white;">＋ この日の予定を追加</button>
+    </div>
   </div>`;
 }
 
@@ -2439,6 +2650,14 @@ function bindCalendarEvents() {
     openTaskModal();
     document.getElementById('task-due').value = calSelectedDate;
   };
+  const addEventBtn = document.getElementById('cal-add-event');
+  if (addEventBtn) addEventBtn.onclick = () => {
+    openEventModal(null, calSelectedDate);
+  };
+  // 予定行クリックで編集モーダル
+  document.querySelectorAll('.event-row[data-event-id]').forEach(row => {
+    row.onclick = () => openEventModal(row.dataset.eventId);
+  });
 }
 
 function populateMemoFilter() {
@@ -4628,56 +4847,113 @@ function recurLabel(rec) {
   if (rec.type === 'monthly') base = `毎月${rec.dayOfMonth}日`;
   else if (rec.type === 'yearly') base = `毎年${rec.month}月${rec.dayOfMonth}日`;
   else if (rec.type === 'after_completion') base = `完了後${rec.daysAfter}日`;
-  if (rec.shiftToWeekday && (rec.type === 'monthly' || rec.type === 'yearly')) {
-    base += '・平日繰上';
+  else if (rec.type === 'monthly_eom_business') {
+    const n = parseInt(rec.daysBeforeEom) || 0;
+    base = n === 0 ? '毎月末平日' : `毎月末平日-${n}営業日`;
+  }
+  if ((rec.type === 'monthly' || rec.type === 'yearly')) {
+    if (rec.shiftToWeekday) base += '・平日繰上';
+    else if (rec.shiftToWeekdayAfter) base += '・平日繰下';
   }
   return base;
 }
-// 指定日が土日祝の場合、その前の平日まで遡る
-function shiftToBusinessDay(dateStr) {
+// "YYYY-MM-DD" をローカル時刻 00:00 の Date に変換（new Date('YYYY-MM-DD')はUTC解釈で時刻ズレが起きるため）
+function parseLocalDate(s) {
+  if (!s) return null;
+  const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return new Date(s);
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+// 営業日判定（土日・祝日でなければtrue）
+function isBusinessDay(d) {
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) return false;
+  const holidays = getJapaneseHolidays(d.getFullYear());
+  return !holidays[formatDateKey(d)];
+}
+// 指定日が土日祝の場合、前 or 次の平日まで移動
+// direction: 'before'（既定／前へ） または 'after'（次へ）
+function shiftToBusinessDay(dateStr, direction) {
+  const step = direction === 'after' ? 1 : -1;
   let d = new Date(dateStr);
   for (let i = 0; i < 14; i++) { // 安全上限
-    const dow = d.getDay();
-    const holidays = getJapaneseHolidays(d.getFullYear());
-    const key = formatDateKey(d);
-    if (dow !== 0 && dow !== 6 && !holidays[key]) {
-      return key;
-    }
+    if (isBusinessDay(d)) return formatDateKey(d);
+    d.setDate(d.getDate() + step);
+  }
+  return formatDateKey(d);
+}
+// 指定年月の「月末平日のN営業日前」を計算
+function calcEomBusinessDay(year, month, daysBefore) {
+  let d = new Date(year, month + 1, 0); // 月末日
+  while (!isBusinessDay(d)) d.setDate(d.getDate() - 1); // 最終営業日まで遡る
+  let remaining = parseInt(daysBefore) || 0;
+  while (remaining > 0) {
     d.setDate(d.getDate() - 1);
+    if (isBusinessDay(d)) remaining--;
   }
   return formatDateKey(d);
 }
 function calcNextDue(rec, fromDate) {
-  fromDate = fromDate ? new Date(fromDate) : new Date();
-  fromDate.setHours(0, 0, 0, 0);
+  // fromDate は Date でも 'YYYY-MM-DD' でも受ける
+  let fromKey;
+  let baseY, baseM;
+  if (fromDate instanceof Date) {
+    fromKey = formatDateKey(fromDate);
+    baseY = fromDate.getFullYear();
+    baseM = fromDate.getMonth();
+  } else if (typeof fromDate === 'string' && fromDate) {
+    const d = parseLocalDate(fromDate);
+    fromKey = formatDateKey(d);
+    baseY = d.getFullYear();
+    baseM = d.getMonth();
+  } else {
+    const d = new Date(); d.setHours(0,0,0,0);
+    fromKey = formatDateKey(d);
+    baseY = d.getFullYear();
+    baseM = d.getMonth();
+  }
   if (!rec || rec.type === 'none') return null;
-  let result = null;
+  // 平日繰上/繰下 適用ヘルパー
+  const applyShift = (resultStr) => {
+    if (rec.type !== 'monthly' && rec.type !== 'yearly') return resultStr;
+    if (rec.shiftToWeekday) return shiftToBusinessDay(resultStr, 'before');
+    if (rec.shiftToWeekdayAfter) return shiftToBusinessDay(resultStr, 'after');
+    return resultStr;
+  };
   if (rec.type === 'monthly') {
     const day = parseInt(rec.dayOfMonth) || 1;
-    let next = new Date(fromDate.getFullYear(), fromDate.getMonth(), day);
-    if (next <= fromDate) next = new Date(fromDate.getFullYear(), fromDate.getMonth() + 1, day);
-    // 月によって日付がない場合（2月30日等）は翌月の月末
-    if (next.getDate() !== day) next = new Date(next.getFullYear(), next.getMonth(), 0);
-    result = formatDateKey(next);
+    // 当月から最大24ヶ月先まで試行し、シフト後に fromKey より大きい最初の日を返す
+    for (let i = 0; i < 24; i++) {
+      let next = new Date(baseY, baseM + i, day);
+      if (next.getDate() !== day) next = new Date(baseY, baseM + i + 1, 0); // 月末
+      const result = applyShift(formatDateKey(next));
+      if (result > fromKey) return result; // YYYY-MM-DD は文字列比較で大小判定可
+    }
+    return null;
   } else if (rec.type === 'yearly') {
     const m = (parseInt(rec.month) || 1) - 1;
     const d = parseInt(rec.dayOfMonth) || 1;
-    let next = new Date(fromDate.getFullYear(), m, d);
-    if (next <= fromDate) next = new Date(fromDate.getFullYear() + 1, m, d);
-    if (next.getDate() !== d) next = new Date(next.getFullYear(), next.getMonth() + 1, 0);
-    result = formatDateKey(next);
+    for (let i = 0; i < 5; i++) {
+      let next = new Date(baseY + i, m, d);
+      if (next.getDate() !== d) next = new Date(baseY + i, m + 1, 0);
+      const result = applyShift(formatDateKey(next));
+      if (result > fromKey) return result;
+    }
+    return null;
   } else if (rec.type === 'after_completion') {
     const days = parseInt(rec.daysAfter) || 1;
-    const next = new Date(fromDate);
-    next.setDate(next.getDate() + days);
-    result = formatDateKey(next);
+    const fd = new Date(baseY, baseM, parseLocalDate(fromKey).getDate());
+    fd.setDate(fd.getDate() + days);
+    return formatDateKey(fd);
+  } else if (rec.type === 'monthly_eom_business') {
+    const daysBefore = parseInt(rec.daysBeforeEom) || 0;
+    for (let i = 0; i < 24; i++) {
+      const result = calcEomBusinessDay(baseY, baseM + i, daysBefore);
+      if (result > fromKey) return result;
+    }
+    return null;
   }
-  if (!result) return null;
-  // shiftToWeekday オプションで土日祝なら前の平日へ繰上（毎月・毎年のみ適用）
-  if (rec.shiftToWeekday && (rec.type === 'monthly' || rec.type === 'yearly')) {
-    result = shiftToBusinessDay(result);
-  }
-  return result;
+  return null;
 }
 // タスク完了時の繰り返し処理。
 // 完了履歴をカレンダーに残すため、現在のタスクは「完了済」のまま保持し、
@@ -4731,7 +5007,9 @@ function openTaskModal(id) {
   document.getElementById('task-recur-month').value = rec.month || 1;
   document.getElementById('task-recur-yday').value = (rec.type === 'yearly' && rec.dayOfMonth) ? rec.dayOfMonth : 1;
   document.getElementById('task-recur-after').value = rec.daysAfter || 7;
+  document.getElementById('task-recur-eom-days').value = (rec.type === 'monthly_eom_business' && rec.daysBeforeEom != null) ? rec.daysBeforeEom : 0;
   document.getElementById('task-recur-shift').checked = !!rec.shiftToWeekday;
+  document.getElementById('task-recur-shift-after').checked = !!rec.shiftToWeekdayAfter;
   updateRecurVisibility(rec.type || 'none');
   // 紐付けメモ
   const initialMemoIds = id
@@ -4868,10 +5146,31 @@ function updateRecurVisibility(type) {
   document.getElementById('recur-monthly-row').style.display = type === 'monthly' ? 'block' : 'none';
   document.getElementById('recur-yearly-row').style.display = type === 'yearly' ? 'flex' : 'none';
   document.getElementById('recur-after-row').style.display = type === 'after_completion' ? 'block' : 'none';
-  // 平日繰上オプションは毎月・毎年でのみ表示
+  document.getElementById('recur-eom-row').style.display = type === 'monthly_eom_business' ? 'block' : 'none';
+  // 平日繰上/繰下オプションは毎月・毎年でのみ表示（EOMは元から営業日基準なので不要）
   document.getElementById('recur-shift-row').style.display = (type === 'monthly' || type === 'yearly') ? 'block' : 'none';
 }
-document.getElementById('task-recur-type').addEventListener('change', e => updateRecurVisibility(e.target.value));
+document.getElementById('task-recur-type').addEventListener('change', e => {
+  updateRecurVisibility(e.target.value);
+  // 期限日が入っていれば、毎月/毎年の日付を自動で設定
+  const dueRaw = document.getElementById('task-due').value;
+  if (dueRaw) {
+    const dueD = new Date(dueRaw);
+    if (e.target.value === 'monthly') {
+      document.getElementById('task-recur-day').value = dueD.getDate();
+    } else if (e.target.value === 'yearly') {
+      document.getElementById('task-recur-month').value = dueD.getMonth() + 1;
+      document.getElementById('task-recur-yday').value = dueD.getDate();
+    }
+  }
+});
+// 「前へ」「次へ」のチェックボックスは排他制御
+document.getElementById('task-recur-shift').addEventListener('change', e => {
+  if (e.target.checked) document.getElementById('task-recur-shift-after').checked = false;
+});
+document.getElementById('task-recur-shift-after').addEventListener('change', e => {
+  if (e.target.checked) document.getElementById('task-recur-shift').checked = false;
+});
 document.getElementById('task-cancel').onclick = () => {
   pendingTaskMemoId = null;
   document.getElementById('task-modal').classList.remove('show');
@@ -4882,22 +5181,30 @@ document.getElementById('task-save').onclick = () => {
   // 繰り返し設定の構築
   const recType = document.getElementById('task-recur-type').value;
   const shiftToWeekday = document.getElementById('task-recur-shift').checked;
+  const shiftToWeekdayAfter = document.getElementById('task-recur-shift-after').checked;
   let recurrence = { type: 'none' };
   if (recType === 'monthly') {
     recurrence = {
       type: 'monthly',
       dayOfMonth: parseInt(document.getElementById('task-recur-day').value) || 1,
-      shiftToWeekday
+      shiftToWeekday,
+      shiftToWeekdayAfter
     };
   } else if (recType === 'yearly') {
     recurrence = {
       type: 'yearly',
       month: parseInt(document.getElementById('task-recur-month').value) || 1,
       dayOfMonth: parseInt(document.getElementById('task-recur-yday').value) || 1,
-      shiftToWeekday
+      shiftToWeekday,
+      shiftToWeekdayAfter
     };
   } else if (recType === 'after_completion') {
     recurrence = { type: 'after_completion', daysAfter: parseInt(document.getElementById('task-recur-after').value) || 1 };
+  } else if (recType === 'monthly_eom_business') {
+    recurrence = {
+      type: 'monthly_eom_business',
+      daysBeforeEom: Math.max(0, parseInt(document.getElementById('task-recur-eom-days').value) || 0)
+    };
   }
   // メモ選択（チェックボックス）から取得
   const selectedMemoIds = Array.from(document.querySelectorAll('[data-task-memo]:checked'))
@@ -4906,9 +5213,11 @@ document.getElementById('task-save').onclick = () => {
   const selectedDeviceIds = Array.from(document.querySelectorAll('[data-task-device]:checked'))
     .map(c => c.dataset.taskDevice);
   let dueDate = document.getElementById('task-due').value;
-  // 平日繰上オプションが有効なら、初回の期限日も土日祝なら前の平日に自動シフト
-  if (dueDate && shiftToWeekday && (recType === 'monthly' || recType === 'yearly')) {
-    const shifted = shiftToBusinessDay(dueDate);
+  // 平日繰上/繰下オプションが有効なら、初回の期限日も土日祝なら自動シフト
+  if (dueDate && (recType === 'monthly' || recType === 'yearly')) {
+    let shifted = dueDate;
+    if (shiftToWeekday) shifted = shiftToBusinessDay(dueDate, 'before');
+    else if (shiftToWeekdayAfter) shifted = shiftToBusinessDay(dueDate, 'after');
     if (shifted !== dueDate) {
       dueDate = shifted;
       const sd = new Date(shifted);
@@ -4956,6 +5265,135 @@ document.getElementById('task-delete').onclick = () => {
   save();
   document.getElementById('task-modal').classList.remove('show');
   toast('タスクを削除しました', 'danger');
+  render();
+};
+
+// ====== 予定（イベント）モーダル ======
+let editingEventId = null;
+function openEventModal(id, defaultStartDate) {
+  editingEventId = id || null;
+  const ev = id
+    ? data.events.find(x => x.id === id)
+    : { title: '', startDate: defaultStartDate || formatDateKey(new Date()), endDate: '', recurrence: { type: 'none' } };
+  if (id && !ev) return;
+  document.getElementById('event-modal-title').textContent = id ? '📌 予定を編集' : '📌 新規予定';
+  document.getElementById('event-title').value = ev.title || '';
+  document.getElementById('event-start').value = ev.startDate || '';
+  document.getElementById('event-end').value = ev.endDate || '';
+  const rec = ev.recurrence || { type: 'none' };
+  document.getElementById('event-recur-type').value = rec.type || 'none';
+  document.getElementById('event-recur-day').value = rec.dayOfMonth || 1;
+  document.getElementById('event-recur-month').value = rec.month || 1;
+  document.getElementById('event-recur-yday').value = (rec.type === 'yearly' && rec.dayOfMonth) ? rec.dayOfMonth : 1;
+  document.getElementById('event-recur-eom-days').value = (rec.type === 'monthly_eom_business' && rec.daysBeforeEom != null) ? rec.daysBeforeEom : 0;
+  document.getElementById('event-recur-shift').checked = !!rec.shiftToWeekday;
+  document.getElementById('event-recur-shift-after').checked = !!rec.shiftToWeekdayAfter;
+  updateEventRecurVisibility(rec.type || 'none');
+  document.getElementById('event-delete').style.display = id ? 'inline-block' : 'none';
+  document.getElementById('event-modal').classList.add('show');
+  setTimeout(() => document.getElementById('event-title').focus(), 50);
+}
+function updateEventRecurVisibility(type) {
+  document.getElementById('event-recur-monthly-row').style.display = type === 'monthly' ? 'block' : 'none';
+  document.getElementById('event-recur-yearly-row').style.display = type === 'yearly' ? 'flex' : 'none';
+  document.getElementById('event-recur-eom-row').style.display = type === 'monthly_eom_business' ? 'block' : 'none';
+  document.getElementById('event-recur-shift-row').style.display = (type === 'monthly' || type === 'yearly') ? 'block' : 'none';
+}
+document.getElementById('event-recur-type').addEventListener('change', e => {
+  updateEventRecurVisibility(e.target.value);
+  // 開始日から自動入力
+  const startRaw = document.getElementById('event-start').value;
+  if (startRaw) {
+    const sd = new Date(startRaw);
+    if (e.target.value === 'monthly') {
+      document.getElementById('event-recur-day').value = sd.getDate();
+    } else if (e.target.value === 'yearly') {
+      document.getElementById('event-recur-month').value = sd.getMonth() + 1;
+      document.getElementById('event-recur-yday').value = sd.getDate();
+    }
+  }
+});
+document.getElementById('event-recur-shift').addEventListener('change', e => {
+  if (e.target.checked) document.getElementById('event-recur-shift-after').checked = false;
+});
+document.getElementById('event-recur-shift-after').addEventListener('change', e => {
+  if (e.target.checked) document.getElementById('event-recur-shift').checked = false;
+});
+document.getElementById('event-cancel').onclick = () => {
+  document.getElementById('event-modal').classList.remove('show');
+  editingEventId = null;
+};
+document.getElementById('event-save').onclick = () => {
+  const title = document.getElementById('event-title').value.trim();
+  if (!title) { toast('予定名を入力してください', 'warning'); return; }
+  const startDate = document.getElementById('event-start').value;
+  if (!startDate) { toast('開始日を入力してください', 'warning'); return; }
+  let endDate = document.getElementById('event-end').value;
+  if (endDate && new Date(endDate) < new Date(startDate)) {
+    toast('終了日は開始日以降にしてください', 'warning');
+    return;
+  }
+  if (!endDate) endDate = ''; // 同日扱い
+  const recType = document.getElementById('event-recur-type').value;
+  const shiftToWeekday = document.getElementById('event-recur-shift').checked;
+  const shiftToWeekdayAfter = document.getElementById('event-recur-shift-after').checked;
+  let recurrence = { type: 'none' };
+  if (recType === 'monthly') {
+    recurrence = {
+      type: 'monthly',
+      dayOfMonth: parseInt(document.getElementById('event-recur-day').value) || 1,
+      shiftToWeekday, shiftToWeekdayAfter
+    };
+  } else if (recType === 'yearly') {
+    recurrence = {
+      type: 'yearly',
+      month: parseInt(document.getElementById('event-recur-month').value) || 1,
+      dayOfMonth: parseInt(document.getElementById('event-recur-yday').value) || 1,
+      shiftToWeekday, shiftToWeekdayAfter
+    };
+  } else if (recType === 'monthly_eom_business') {
+    recurrence = {
+      type: 'monthly_eom_business',
+      daysBeforeEom: Math.max(0, parseInt(document.getElementById('event-recur-eom-days').value) || 0)
+    };
+  }
+  // 平日繰上/繰下が有効なら、初回開始日を自動シフト
+  let finalStart = startDate;
+  if (recType === 'monthly' || recType === 'yearly') {
+    if (shiftToWeekday) finalStart = shiftToBusinessDay(startDate, 'before');
+    else if (shiftToWeekdayAfter) finalStart = shiftToBusinessDay(startDate, 'after');
+    if (finalStart !== startDate) {
+      const sd = new Date(finalStart);
+      toast(`開始日が土日祝のため ${sd.getMonth() + 1}/${sd.getDate()} に自動調整しました`, 'success');
+    }
+  }
+  const now = Date.now();
+  if (editingEventId) {
+    const ev = data.events.find(x => x.id === editingEventId);
+    if (ev) {
+      Object.assign(ev, { title, startDate: finalStart, endDate, recurrence, updated: now });
+      toast('予定を更新しました', 'success');
+    }
+  } else {
+    data.events.push({
+      id: 'evt_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6),
+      title, startDate: finalStart, endDate, recurrence,
+      created: now, updated: now
+    });
+    toast('予定を追加しました', 'success');
+  }
+  save();
+  document.getElementById('event-modal').classList.remove('show');
+  editingEventId = null;
+  render();
+};
+document.getElementById('event-delete').onclick = () => {
+  if (!confirm('この予定を削除しますか？')) return;
+  data.events = data.events.filter(x => x.id !== editingEventId);
+  save();
+  document.getElementById('event-modal').classList.remove('show');
+  toast('予定を削除しました', 'danger');
+  editingEventId = null;
   render();
 };
 
@@ -5174,16 +5612,18 @@ function importJSON(e) {
       const taskIds = new Set(data.tasks.map(t => t.id));
       const folderIds = new Set(data.folders.map(f => f.id));
       const deviceIds = new Set((data.devices || []).map(d => d.id));
-      let mAdd = 0, tAdd = 0, fAdd = 0, dAdd = 0;
+      const eventIds = new Set((data.events || []).map(e => e.id));
+      let mAdd = 0, tAdd = 0, fAdd = 0, dAdd = 0, eAdd = 0;
       (imported.folders || []).forEach(f => { if (!folderIds.has(f.id)) { data.folders.push(f); fAdd++; } });
       (imported.memos || []).forEach(m => { if (!memoIds.has(m.id)) { data.memos.push(m); mAdd++; } });
       (imported.tasks || []).forEach(t => { if (!taskIds.has(t.id)) { data.tasks.push(t); tAdd++; } });
       (imported.devices || []).forEach(d => { if (!deviceIds.has(d.id)) { data.devices.push(d); dAdd++; } });
+      (imported.events || []).forEach(e => { if (!eventIds.has(e.id)) { data.events.push(e); eAdd++; } });
       // folderOrder の整合性を確保（全般含む）
       ensureFolderOrder();
       registerCurrentDevice();
       save();
-      toast(`メモ ${mAdd}件 / タスク ${tAdd}件 / フォルダ ${fAdd}件 / デバイス ${dAdd}件 を取り込みました`, 'success');
+      toast(`メモ ${mAdd}件 / タスク ${tAdd}件 / フォルダ ${fAdd}件 / デバイス ${dAdd}件 / 予定 ${eAdd}件 を取り込みました`, 'success');
       render();
     } catch(err) {
       toast('JSONの読み込みに失敗しました', 'danger');
@@ -5194,7 +5634,7 @@ function importJSON(e) {
 function clearAll() {
   if (!confirm('本当に全データを削除しますか？元に戻せません。')) return;
   if (!confirm('もう一度確認: 削除を実行しますか？')) return;
-  data = { memos: [], tasks: [], folders: [], folderOrder: [], devices: [], lastNotified: {} };
+  data = { memos: [], tasks: [], folders: [], folderOrder: [], devices: [], events: [], lastNotified: {} };
   ensureFolderOrder();
   registerCurrentDevice();
   save();
