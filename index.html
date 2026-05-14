@@ -371,27 +371,109 @@
   .done-task-item .dt-meta .recur { color: #8e44ad; }
   .done-task-item .dt-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
-  /* タスク編集モーダル内のメモ選択 */
+  /* タスク編集モーダル内のメモ選択／通知先PC選択 */
   .task-memo-list {
     max-height: 150px;
     overflow-y: auto;
     border: 1px solid var(--border);
     border-radius: 6px;
-    padding: 6px;
+    padding: 8px;
     background: white;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-content: flex-start;
   }
   .task-memo-item {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 4px 6px;
+    gap: 6px;
+    padding: 5px 10px;
     cursor: pointer;
-    border-radius: 4px;
+    border-radius: 14px;
     font-size: 13px;
+    line-height: 1;
+    background: #f4f6f8;
+    border: 1px solid var(--border);
+    transition: background 0.1s, border-color 0.1s;
+    white-space: nowrap;
   }
-  .task-memo-item:hover { background: var(--bg); }
-  .task-memo-item input { cursor: pointer; flex-shrink: 0; }
-  .task-memo-empty { color: var(--text-muted); font-size: 12px; padding: 8px; text-align: center; }
+  .task-memo-item:hover { background: var(--bg); border-color: var(--accent); }
+  .task-memo-item:has(input:checked) {
+    background: #e8f4fc;
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .task-memo-item input {
+    cursor: pointer;
+    flex-shrink: 0;
+    margin: 0;
+    width: 14px;
+    height: 14px;
+    vertical-align: middle;
+  }
+  .task-memo-item span { display: inline-block; vertical-align: middle; }
+  .task-memo-empty { color: var(--text-muted); font-size: 12px; padding: 8px; text-align: center; width: 100%; }
+
+  /* フォルダグループ表示モード（表示するメモ用） */
+  .task-memo-list.grouped {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 8px;
+    align-content: stretch;
+  }
+  .tm-folder-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+  }
+  .tm-folder-header {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 12px;
+    border-radius: 14px;
+    background: #eef2f7;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 13px;
+    line-height: 1;
+    color: var(--text);
+    align-self: flex-start;
+    font-weight: 600;
+    user-select: none;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+  }
+  .tm-folder-header:hover { background: #dde5ef; border-color: var(--accent); }
+  .tm-folder-header.has-checked {
+    background: #e8f4fc;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .tm-folder-count {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-muted);
+    margin-left: 2px;
+  }
+  .tm-folder-header.has-checked .tm-folder-count { color: var(--accent); }
+  .tm-folder-arrow { font-size: 11px; opacity: 0.7; }
+  .tm-folder-memos {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding-left: 14px;
+    margin-left: 4px;
+    border-left: 2px solid #eef2f7;
+  }
+  .tm-folder-memos:empty {
+    padding: 4px 0 4px 14px;
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+  .tm-folder-memos:empty::before { content: '— メモなし —'; opacity: 0.6; }
 
   /* カレンダー */
   .calendar {
@@ -1487,14 +1569,18 @@
       <input type="number" id="task-recur-after" min="1" max="365" value="7" style="width:120px;"> 日後
     </div>
     <div class="form-group" id="recur-shift-row" style="display:none;">
-      <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-weight:normal; font-size:13px;">
-        <input type="checkbox" id="task-recur-shift">
+      <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; font-size:13px; line-height:1;">
+        <input type="checkbox" id="task-recur-shift" style="margin:0; width:14px; height:14px; flex-shrink:0;">
         <span>土日・祝日に重なる場合は前の平日に自動的に移動する</span>
       </label>
     </div>
     <div class="form-group">
       <label>📝 表示するメモ（複数選択可。選択した全メモにこのタスクが表示されます）</label>
       <div id="task-memo-list" class="task-memo-list"></div>
+    </div>
+    <div class="form-group">
+      <label>🔔 通知先PC（複数選択可。チェックを入れたPCにのみ期限通知が届きます）</label>
+      <div id="task-device-list" class="task-memo-list"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-danger" id="task-delete" style="display:none">削除</button>
@@ -1564,6 +1650,24 @@
   </div>
 </div>
 
+<!-- デバイス名（このPCの名前）入力モーダル -->
+<div class="modal-bg" id="device-name-modal">
+  <div class="modal" style="max-width: 420px;">
+    <h2>🖥 このPCに名前をつけてください</h2>
+    <div style="font-size:12px; color:var(--text-muted); margin-bottom:12px; line-height:1.6;">
+      別のPCとデータを同期したとき、タスクの通知先を区別するためにPCごとの名前を設定します。<br>
+      例:「自宅PC」「仕事PC」「ノート」など、わかりやすい名前を付けてください。
+    </div>
+    <div class="form-group">
+      <label>このPCの名前</label>
+      <input type="text" id="device-name-input" placeholder="例: 自宅PC" maxlength="30">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" id="device-name-save">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- フォルダ管理モーダル -->
 <div class="modal-bg" id="folder-modal">
   <div class="modal" style="max-width: 480px;">
@@ -1618,8 +1722,32 @@
 <script>
 // ====== ストレージ ======
 const STORAGE_KEY = 'note_data_v1';
-let data = { memos: [], tasks: [], folders: [], folderOrder: [], lastNotified: {} };
+let data = { memos: [], tasks: [], folders: [], folderOrder: [], devices: [], lastNotified: {} };
 const UNFILED_ID = '__unfiled__';
+
+// ====== デバイス（このPC）の識別 ======
+// deviceId はこのPC固有のID（同期されない）。deviceName は同期される表示名。
+let deviceId = localStorage.getItem('note_device_id');
+if (!deviceId) {
+  deviceId = 'dev_' + Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+  localStorage.setItem('note_device_id', deviceId);
+}
+let deviceName = localStorage.getItem('note_device_name') || '';
+// 通知の重複防止は端末ごとに管理（同期データではなくlocalStorageに保存）
+let lastNotifiedDate = localStorage.getItem('note_last_notified_date') || '';
+
+// data.devices にこのPCを登録/更新する
+function registerCurrentDevice() {
+  if (!Array.isArray(data.devices)) data.devices = [];
+  let entry = data.devices.find(d => d.id === deviceId);
+  if (!entry) {
+    entry = { id: deviceId, name: deviceName || '名無しPC', lastSeen: Date.now() };
+    data.devices.push(entry);
+  } else {
+    entry.lastSeen = Date.now();
+    if (deviceName) entry.name = deviceName;
+  }
+}
 
 // ====== 自動バックアップ設定 ======
 let backupEnabled = localStorage.getItem('note_backup_enabled') === '1';
@@ -1821,10 +1949,12 @@ async function syncFromDrive(showToast) {
     if (!res.ok) throw new Error('download failed: ' + res.status);
     const remote = await res.json();
     if (!remote || typeof remote !== 'object') throw new Error('invalid data');
-    data = Object.assign({ memos: [], tasks: [], folders: [], folderOrder: [], lastNotified: {} }, remote);
+    data = Object.assign({ memos: [], tasks: [], folders: [], folderOrder: [], devices: [], lastNotified: {} }, remote);
     if (!Array.isArray(data.folders)) data.folders = [];
     if (!Array.isArray(data.folderOrder)) data.folderOrder = [];
+    if (!Array.isArray(data.devices)) data.devices = [];
     ensureFolderOrder();
+    registerCurrentDevice();
     saveLocalOnly();
     if (showToast) toast('Drive から取得しました', 'success');
     render();
@@ -1871,7 +2001,9 @@ function load() {
   // foldersフィールドが無い旧データに対応
   if (!Array.isArray(data.folders)) data.folders = [];
   if (!Array.isArray(data.folderOrder)) data.folderOrder = [];
+  if (!Array.isArray(data.devices)) data.devices = [];
   ensureFolderOrder();
+  registerCurrentDevice();
   // 旧形式 memoId（単一）を新形式 memoIds（複数）に移行
   let migrated = false;
   (data.tasks || []).forEach(t => {
@@ -4540,6 +4672,7 @@ function handleRecurrence(t) {
     status: 'todo',
     recurrence: oldRecurrence,
     memoIds: [...(t.memoIds || [])],
+    notifyDeviceIds: Array.isArray(t.notifyDeviceIds) ? [...t.notifyDeviceIds] : undefined,
     created: Date.now(),
     updated: Date.now()
   };
@@ -4574,22 +4707,130 @@ function openTaskModal(id) {
   const initialMemoIds = id
     ? (t.memoIds || [])
     : (pendingTaskMemoId ? [pendingTaskMemoId] : []);
+  // 開いた時のフォルダ展開状態をリセット → チェック済みメモのあるフォルダのみ自動展開
+  taskMemoExpandedFolders = new Set();
+  initialMemoIds.forEach(mid => {
+    const m = data.memos.find(x => x.id === mid);
+    if (m) taskMemoExpandedFolders.add(m.folderId || UNFILED_ID);
+  });
   renderTaskMemoList(initialMemoIds);
+  // 通知先デバイス（新規はこのPCのみ初期チェック。既存タスクで notifyDeviceIds 未定義
+  // のものは「全デバイス」として扱い、全部チェック済みで表示する）
+  let initialDeviceIds;
+  if (id) {
+    initialDeviceIds = Array.isArray(t.notifyDeviceIds) ? t.notifyDeviceIds.slice() : (data.devices || []).map(d => d.id);
+  } else {
+    initialDeviceIds = [deviceId];
+  }
+  renderTaskDeviceList(initialDeviceIds);
   document.getElementById('task-delete').style.display = id ? 'inline-block' : 'none';
   document.getElementById('task-modal').classList.add('show');
 }
+// タスク編集モーダル: フォルダ展開状態（モーダル開閉ごとにリセット）
+let taskMemoExpandedFolders = new Set();
 function renderTaskMemoList(checkedIds) {
   const list = document.getElementById('task-memo-list');
   if (!list) return;
+  list.classList.add('grouped');
   if (data.memos.length === 0) {
     list.innerHTML = '<div class="task-memo-empty">メモがまだありません</div>';
     return;
   }
-  list.innerHTML = data.memos.map(m => {
-    const checked = checkedIds.includes(m.id) ? ' checked' : '';
+  // メモをフォルダIDでグルーピング
+  const folderMemos = {};
+  const unfiled = [];
+  data.memos.forEach(m => {
+    if (m.folderId) {
+      if (!folderMemos[m.folderId]) folderMemos[m.folderId] = [];
+      folderMemos[m.folderId].push(m);
+    } else {
+      unfiled.push(m);
+    }
+  });
+  // folderOrder の順にセクションを描画（全般含む）
+  let html = '';
+  data.folderOrder.forEach(id => {
+    if (id === UNFILED_ID) {
+      if (unfiled.length === 0) return;
+      html += renderTaskMemoFolderSection({ id: UNFILED_ID, name: '全般' }, unfiled, checkedIds, true);
+    } else {
+      const f = data.folders.find(x => x.id === id);
+      if (!f) return;
+      const memos = folderMemos[f.id] || [];
+      if (memos.length === 0) return; // 空フォルダは隠す
+      html += renderTaskMemoFolderSection(f, memos, checkedIds, false);
+    }
+  });
+  list.innerHTML = html || '<div class="task-memo-empty">メモがまだありません</div>';
+  // フォルダヘッダーのクリックで開閉
+  list.querySelectorAll('[data-tm-folder-toggle]').forEach(h => {
+    h.addEventListener('click', e => {
+      e.preventDefault();
+      const id = h.dataset.tmFolderToggle;
+      if (taskMemoExpandedFolders.has(id)) taskMemoExpandedFolders.delete(id);
+      else taskMemoExpandedFolders.add(id);
+      // 現在のチェック状態を保ったまま再描画
+      const currentChecked = Array.from(document.querySelectorAll('[data-task-memo]:checked'))
+        .map(c => c.dataset.taskMemo);
+      renderTaskMemoList(currentChecked);
+    });
+  });
+  // チェックボックス変更でヘッダーの「(checked/total)」表示を更新
+  list.querySelectorAll('[data-task-memo]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const currentChecked = Array.from(document.querySelectorAll('[data-task-memo]:checked'))
+        .map(c => c.dataset.taskMemo);
+      // 開閉状態は維持して再描画
+      renderTaskMemoList(currentChecked);
+    });
+  });
+}
+function renderTaskMemoFolderSection(f, memos, checkedIds, isUnfiled) {
+  const expanded = taskMemoExpandedFolders.has(f.id);
+  const checkedInFolder = memos.filter(m => checkedIds.includes(m.id)).length;
+  const icon = isUnfiled ? '📂' : '📁';
+  const arrow = expanded ? '▾' : '▸';
+  const headerCls = 'tm-folder-header' + (checkedInFolder > 0 ? ' has-checked' : '');
+  const countText = checkedInFolder > 0 ? `${checkedInFolder}/${memos.length}件` : `${memos.length}件`;
+  let html = `<div class="tm-folder-section">
+    <button type="button" class="${headerCls}" data-tm-folder-toggle="${escape(f.id)}">
+      <span>${icon} ${escape(f.name)}</span>
+      <span class="tm-folder-count">${countText}</span>
+      <span class="tm-folder-arrow">${arrow}</span>
+    </button>`;
+  if (expanded) {
+    html += `<div class="tm-folder-memos">${memos.map(m => {
+      const checked = checkedIds.includes(m.id) ? ' checked' : '';
+      return `<label class="task-memo-item">
+        <input type="checkbox" data-task-memo="${m.id}"${checked}>
+        <span>📝 ${escape(m.title || '(無題)')}</span>
+      </label>`;
+    }).join('')}</div>`;
+  }
+  html += `</div>`;
+  return html;
+}
+function renderTaskDeviceList(checkedIds) {
+  const list = document.getElementById('task-device-list');
+  if (!list) return;
+  // 表示順: このPC → その他のデバイス（最終接続日時の新しい順）
+  const devices = (data.devices || []).slice();
+  devices.sort((a, b) => {
+    if (a.id === deviceId) return -1;
+    if (b.id === deviceId) return 1;
+    return (b.lastSeen || 0) - (a.lastSeen || 0);
+  });
+  if (devices.length === 0) {
+    list.innerHTML = '<div class="task-memo-empty">登録されたデバイスがありません</div>';
+    return;
+  }
+  list.innerHTML = devices.map(d => {
+    const checked = checkedIds.includes(d.id) ? ' checked' : '';
+    const isThis = d.id === deviceId;
+    const label = isThis ? `🖥 ${escape(d.name)}（このPC）` : `🖥 ${escape(d.name)}`;
     return `<label class="task-memo-item">
-      <input type="checkbox" data-task-memo="${m.id}"${checked}>
-      <span>📝 ${escape(m.title || '(無題)')}</span>
+      <input type="checkbox" data-task-device="${escape(d.id)}"${checked}>
+      <span>${label}</span>
     </label>`;
   }).join('');
 }
@@ -4631,6 +4872,9 @@ document.getElementById('task-save').onclick = () => {
   // メモ選択（チェックボックス）から取得
   const selectedMemoIds = Array.from(document.querySelectorAll('[data-task-memo]:checked'))
     .map(c => c.dataset.taskMemo);
+  // 通知先デバイスのチェック状態を取得
+  const selectedDeviceIds = Array.from(document.querySelectorAll('[data-task-device]:checked'))
+    .map(c => c.dataset.taskDevice);
   let dueDate = document.getElementById('task-due').value;
   // 平日繰上オプションが有効なら、初回の期限日も土日祝なら前の平日に自動シフト
   if (dueDate && shiftToWeekday && (recType === 'monthly' || recType === 'yearly')) {
@@ -4649,6 +4893,7 @@ document.getElementById('task-save').onclick = () => {
     status: document.getElementById('task-status').value,
     recurrence,
     memoIds: selectedMemoIds,
+    notifyDeviceIds: selectedDeviceIds,
     updated: Date.now()
   };
   if (editingTaskId) {
@@ -4777,6 +5022,21 @@ function renderSettings() {
         現在の状態: <strong id="notif-status">未許可</strong></div>
         <button class="btn btn-secondary btn-small" id="notif-enable" style="margin-top:10px;">通知を有効にする</button>
       </div>
+      <div class="card" style="cursor:default; border-left-color: #6c4dbb;">
+        <div class="card-title">🖥 このPCの名前 / 登録済みデバイス</div>
+        <div class="card-body" style="margin-bottom:10px;">
+          別PCと同期したとき、タスクごとに通知先のPCを指定するためにこのPCに名前をつけます。
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <span style="font-size:12px; color: var(--text-muted);">このPC:</span>
+          <input type="text" id="settings-device-name" value="${escape(deviceName || '')}" placeholder="例: 自宅PC" maxlength="30" style="flex:1; min-width:160px; padding:6px 10px; border:1px solid var(--border); border-radius:4px;">
+          <button class="btn btn-primary btn-small" id="settings-device-save">名前を保存</button>
+        </div>
+        <div style="margin-top:14px;">
+          <div style="font-size:12px; color: var(--text-muted); margin-bottom:6px;">登録済みデバイス（同期で見つかった全PC）:</div>
+          <div id="device-registry-list"></div>
+        </div>
+      </div>
       <div class="card" style="cursor:default; border-left-color: var(--danger);">
         <div class="card-title">⚠ 全データ削除</div>
         <div class="card-body">全てのメモとタスクをこのPCから削除します。事前にエクスポートを推奨します。</div>
@@ -4794,6 +5054,16 @@ function bindSettingsButtons() {
   document.getElementById('clear-all').onclick = clearAll;
   document.getElementById('notif-enable').onclick = enableNotifications;
   updateNotifStatus();
+  // デバイス名 保存
+  const devSave = document.getElementById('settings-device-save');
+  const devInput = document.getElementById('settings-device-name');
+  if (devSave && devInput) {
+    devSave.onclick = () => saveDeviceName(devInput.value);
+    devInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') devSave.click();
+    });
+  }
+  renderDeviceRegistryList();
   // Drive 同期ボタン
   const dConnect = document.getElementById('drive-connect');
   if (dConnect) dConnect.onclick = () => {
@@ -4873,14 +5143,17 @@ function importJSON(e) {
       const memoIds = new Set(data.memos.map(m => m.id));
       const taskIds = new Set(data.tasks.map(t => t.id));
       const folderIds = new Set(data.folders.map(f => f.id));
-      let mAdd = 0, tAdd = 0, fAdd = 0;
+      const deviceIds = new Set((data.devices || []).map(d => d.id));
+      let mAdd = 0, tAdd = 0, fAdd = 0, dAdd = 0;
       (imported.folders || []).forEach(f => { if (!folderIds.has(f.id)) { data.folders.push(f); fAdd++; } });
       (imported.memos || []).forEach(m => { if (!memoIds.has(m.id)) { data.memos.push(m); mAdd++; } });
       (imported.tasks || []).forEach(t => { if (!taskIds.has(t.id)) { data.tasks.push(t); tAdd++; } });
+      (imported.devices || []).forEach(d => { if (!deviceIds.has(d.id)) { data.devices.push(d); dAdd++; } });
       // folderOrder の整合性を確保（全般含む）
       ensureFolderOrder();
+      registerCurrentDevice();
       save();
-      toast(`メモ ${mAdd}件 / タスク ${tAdd}件 / フォルダ ${fAdd}件 を取り込みました`, 'success');
+      toast(`メモ ${mAdd}件 / タスク ${tAdd}件 / フォルダ ${fAdd}件 / デバイス ${dAdd}件 を取り込みました`, 'success');
       render();
     } catch(err) {
       toast('JSONの読み込みに失敗しました', 'danger');
@@ -4891,7 +5164,9 @@ function importJSON(e) {
 function clearAll() {
   if (!confirm('本当に全データを削除しますか？元に戻せません。')) return;
   if (!confirm('もう一度確認: 削除を実行しますか？')) return;
-  data = { memos: [], tasks: [], lastNotified: {} };
+  data = { memos: [], tasks: [], folders: [], folderOrder: [], devices: [], lastNotified: {} };
+  ensureFolderOrder();
+  registerCurrentDevice();
   save();
   toast('全データを削除しました', 'danger');
   render();
@@ -4928,9 +5203,12 @@ function checkDueTasks() {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const today = new Date(); today.setHours(0,0,0,0);
   const todayStr = today.toDateString();
-  if (data.lastNotified.date === todayStr) return; // 1日1回
+  // 1日1回の制限は端末ごとに（localStorageで管理。同期データのlastNotifiedは未使用）
+  if (lastNotifiedDate === todayStr) return;
   const targets = data.tasks.filter(t => {
     if (t.status === 'done' || !t.due) return false;
+    // 通知先がこのPCを含まないタスクは除外（旧データで未定義のものは全PC通知扱い）
+    if (Array.isArray(t.notifyDeviceIds) && !t.notifyDeviceIds.includes(deviceId)) return false;
     const d = new Date(t.due);
     const diff = (d - today) / 86400000;
     return diff <= 3;
@@ -4945,8 +5223,8 @@ function checkDueTasks() {
       new Notification('Note - タスクの期限', { body: body.trim() + '\n最初: ' + targets[0].title, icon: '' });
     } catch(e) { console.warn(e); }
   }
-  data.lastNotified = { date: todayStr };
-  save();
+  lastNotifiedDate = todayStr;
+  localStorage.setItem('note_last_notified_date', todayStr);
 }
 
 // ====== 共通 ======
@@ -5009,6 +5287,90 @@ function updateBadges() {
   });
 })();
 
+// 設定画面の登録済みデバイス一覧を描画
+function renderDeviceRegistryList() {
+  const list = document.getElementById('device-registry-list');
+  if (!list) return;
+  const devices = (data.devices || []).slice().sort((a, b) => {
+    if (a.id === deviceId) return -1;
+    if (b.id === deviceId) return 1;
+    return (b.lastSeen || 0) - (a.lastSeen || 0);
+  });
+  if (devices.length === 0) {
+    list.innerHTML = '<div class="task-memo-empty">まだ登録されたデバイスはありません</div>';
+    return;
+  }
+  list.innerHTML = devices.map(d => {
+    const isThis = d.id === deviceId;
+    const lastSeen = d.lastSeen
+      ? new Date(d.lastSeen).toLocaleString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+      : '不明';
+    const removeBtn = isThis
+      ? ''
+      : `<button class="btn btn-danger btn-small" data-device-remove="${escape(d.id)}" title="この登録デバイスを一覧から削除">削除</button>`;
+    return `<div class="folder-row" style="margin-bottom:6px;">
+      <span style="flex-shrink:0;">🖥</span>
+      <div style="flex:1; min-width:0;">
+        <div style="font-size:13px; font-weight:600;">${escape(d.name)}${isThis ? '<span style="margin-left:6px; color:var(--accent); font-size:11px;">（このPC）</span>' : ''}</div>
+        <div style="font-size:11px; color:var(--text-muted);">最終接続: ${lastSeen}</div>
+      </div>
+      ${removeBtn}
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-device-remove]').forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.deviceRemove;
+      const d = data.devices.find(x => x.id === id);
+      if (!d) return;
+      if (!confirm(`「${d.name}」をデバイス一覧から削除しますか？\n\n（このPCのデータには影響しません。\nこのPCで作成したタスクで通知先に指定していた場合、対象から外れます。\nそのPCを再度開けば自動的に再登録されます）`)) return;
+      data.devices = data.devices.filter(x => x.id !== id);
+      // タスクの notifyDeviceIds から削除されたID を除外
+      data.tasks.forEach(t => {
+        if (Array.isArray(t.notifyDeviceIds)) {
+          const filtered = t.notifyDeviceIds.filter(x => x !== id);
+          if (filtered.length !== t.notifyDeviceIds.length) {
+            t.notifyDeviceIds = filtered;
+            t.updated = Date.now();
+          }
+        }
+      });
+      save();
+      toast('デバイスを削除しました', 'danger');
+      renderDeviceRegistryList();
+    };
+  });
+}
+
+// ====== デバイス名（このPCの名前）モーダル ======
+function openDeviceNameModal() {
+  const inp = document.getElementById('device-name-input');
+  inp.value = deviceName || '';
+  document.getElementById('device-name-modal').classList.add('show');
+  setTimeout(() => inp.focus(), 50);
+}
+function saveDeviceName(name) {
+  const trimmed = (name || '').trim();
+  if (!trimmed) { toast('PC名を入力してください', 'warning'); return false; }
+  deviceName = trimmed;
+  localStorage.setItem('note_device_name', deviceName);
+  registerCurrentDevice();
+  save();
+  toast(`このPCを「${deviceName}」として登録しました`, 'success');
+  document.getElementById('device-name-modal').classList.remove('show');
+  // タスク編集中でもこの後の通知先一覧に反映されるよう再描画
+  if (currentView === 'settings') render();
+  return true;
+}
+document.getElementById('device-name-save').onclick = () => {
+  const inp = document.getElementById('device-name-input');
+  saveDeviceName(inp.value);
+};
+document.getElementById('device-name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    document.getElementById('device-name-save').click();
+  }
+});
+
 // ====== 表編集ポップアップを「外クリック」で消す（一度だけ登録） ======
 document.addEventListener('mousedown', (e) => {
   const tbtns = document.getElementById('table-buttons');
@@ -5026,6 +5388,10 @@ document.addEventListener('mousedown', (e) => {
 load();
 updateBadges();
 render();
+// デバイス名が未設定なら初回ダイアログを表示
+if (!deviceName) {
+  setTimeout(openDeviceNameModal, 300);
+}
 // 起動時に通知チェック、その後3時間ごと
 setTimeout(checkDueTasks, 1500);
 setInterval(checkDueTasks, 3 * 60 * 60 * 1000);
