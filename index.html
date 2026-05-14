@@ -2544,28 +2544,18 @@ function renderCalendar() {
     const dayTasks = tasksByDate[key] || [];
     const dayEvents = eventsByDate[key] || [];
     let eventsHTML = '';
-    const showCount = 3;
     // 予定（イベント）を先に表示（暗い青）
-    let shown = 0;
     dayEvents.forEach(ev => {
-      if (shown >= showCount) return;
       eventsHTML += `<div class="cal-event fixed" title="${escape(ev.title)}">${escape(ev.title)}</div>`;
-      shown++;
     });
-    // 続いてタスクを表示
+    // 続いてタスクをすべて表示（件数制限なし）
     dayTasks.forEach(t => {
-      if (shown >= showCount) return;
       let cls = 'cal-event';
       if (t.status === 'done') cls += ' done';
       else if (new Date(key) < today) cls += ' overdue';
       if (t.priority === 'high') cls += ' high';
       eventsHTML += `<div class="${cls}" title="${escape(t.title)}">${escape(t.title)}</div>`;
-      shown++;
     });
-    const total = dayEvents.length + dayTasks.length;
-    if (total > showCount) {
-      eventsHTML += `<div class="cal-more">他 ${total - showCount} 件</div>`;
-    }
     // 背景色クラス（土曜：薄い青、日祝：薄い赤）
     let bgCls = '';
     if (holidayName || dow === 0) bgCls = ' bg-sun';
