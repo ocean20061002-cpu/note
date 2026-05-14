@@ -1552,6 +1552,7 @@
         <option value="yearly">毎年◯月◯日</option>
         <option value="after_completion">完了ボタンから◯日後</option>
         <option value="monthly_eom_business">月末平日の◯営業日前</option>
+        <option value="before_specific_date">特定日の◯営業日前</option>
       </select>
     </div>
     <div class="form-group" id="recur-monthly-row" style="display:none;">
@@ -1563,6 +1564,30 @@
       <input type="number" id="task-recur-eom-days" min="0" max="30" value="0" style="width:120px;"> 営業日前
       <div style="font-size:11px; color: var(--text-muted); margin-top:4px;">
         例: 0 = 月末平日当日 / 1 = その1営業日前 / 3 = 3営業日前
+      </div>
+    </div>
+    <div class="form-group" id="recur-bsd-row" style="display:none;">
+      <label>特定日の◯営業日前</label>
+      <div class="form-row" style="margin-top:4px;">
+        <div class="form-group" style="flex:1;">
+          <label style="font-size:11px;">特定日</label>
+          <input type="date" id="task-recur-bsd-date">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label style="font-size:11px;">何営業日前</label>
+          <input type="number" id="task-recur-bsd-days" min="0" max="30" value="3" style="width:100%;">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label style="font-size:11px;">繰り返し</label>
+          <select id="task-recur-bsd-freq">
+            <option value="once">1回限り</option>
+            <option value="monthly">毎月（同じ日）</option>
+            <option value="yearly">毎年（同じ月日）</option>
+          </select>
+        </div>
+      </div>
+      <div style="font-size:11px; color: var(--text-muted); margin-top:4px;">
+        例: 特定日 12/25 / 3営業日前 / 毎年 → 毎年12/25の3営業日前にタスク作成
       </div>
     </div>
     <div class="form-row" id="recur-yearly-row" style="display:none;">
@@ -1636,6 +1661,7 @@
         <option value="monthly">毎月◯日</option>
         <option value="yearly">毎年◯月◯日</option>
         <option value="monthly_eom_business">月末平日の◯営業日前</option>
+        <option value="before_specific_date">特定日の◯営業日前</option>
       </select>
     </div>
     <div class="form-group" id="event-recur-monthly-row" style="display:none;">
@@ -1660,6 +1686,27 @@
     <div class="form-group" id="event-recur-eom-row" style="display:none;">
       <label>月末平日（その月の最終営業日）から何営業日前か</label>
       <input type="number" id="event-recur-eom-days" min="0" max="30" value="0" style="width:120px;"> 営業日前
+    </div>
+    <div class="form-group" id="event-recur-bsd-row" style="display:none;">
+      <label>特定日の◯営業日前</label>
+      <div class="form-row" style="margin-top:4px;">
+        <div class="form-group" style="flex:1;">
+          <label style="font-size:11px;">特定日</label>
+          <input type="date" id="event-recur-bsd-date">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label style="font-size:11px;">何営業日前</label>
+          <input type="number" id="event-recur-bsd-days" min="0" max="30" value="3" style="width:100%;">
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label style="font-size:11px;">繰り返し</label>
+          <select id="event-recur-bsd-freq">
+            <option value="once">1回限り</option>
+            <option value="monthly">毎月（同じ日）</option>
+            <option value="yearly">毎年（同じ月日）</option>
+          </select>
+        </div>
+      </div>
     </div>
     <div class="form-group" id="event-recur-shift-row" style="display:none;">
       <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:normal; font-size:13px; line-height:1; margin-bottom:6px;">
@@ -4850,6 +4897,15 @@ function recurLabel(rec) {
   else if (rec.type === 'monthly_eom_business') {
     const n = parseInt(rec.daysBeforeEom) || 0;
     base = n === 0 ? '毎月末平日' : `毎月末平日-${n}営業日`;
+  } else if (rec.type === 'before_specific_date') {
+    const n = parseInt(rec.daysBefore) || 0;
+    const freq = rec.frequency || 'once';
+    const target = rec.targetDate || '';
+    const parts = target.split('-');
+    const tShort = parts.length === 3 ? `${parseInt(parts[1])}/${parseInt(parts[2])}` : target;
+    if (freq === 'once') base = n === 0 ? `${target}` : `${target}の${n}営業日前`;
+    else if (freq === 'monthly') base = n === 0 ? `毎月${parts[2] ? parseInt(parts[2]) : ''}日` : `毎月${parts[2] ? parseInt(parts[2]) : ''}日の${n}営業日前`;
+    else if (freq === 'yearly') base = n === 0 ? `毎年${tShort}` : `毎年${tShort}の${n}営業日前`;
   }
   if ((rec.type === 'monthly' || rec.type === 'yearly')) {
     if (rec.shiftToWeekday) base += '・平日繰上';
@@ -4882,6 +4938,35 @@ function shiftToBusinessDay(dateStr, direction) {
   }
   return formatDateKey(d);
 }
+// 「特定日のN営業日前」設定の初回インスタンス日付を計算
+// once: targetDate 起点で純粋に N 営業日前
+// monthly/yearly: 今日以降の最も近いインスタンス
+function calcFirstInstanceForBSD(rec) {
+  if (!rec || rec.type !== 'before_specific_date') return null;
+  const targetStr = rec.targetDate;
+  if (!targetStr) return null;
+  const targetDate = parseLocalDate(targetStr);
+  if (!targetDate) return null;
+  const daysBefore = parseInt(rec.daysBefore) || 0;
+  const calcBefore = (target) => {
+    let d = new Date(target);
+    let remaining = daysBefore;
+    while (remaining > 0) {
+      d.setDate(d.getDate() - 1);
+      if (isBusinessDay(d)) remaining--;
+    }
+    return formatDateKey(d);
+  };
+  const freq = rec.frequency || 'once';
+  if (freq === 'once') {
+    return calcBefore(targetDate);
+  }
+  // monthly/yearly: 昨日を起点にして「昨日より大きい最初の日」= 今日以降
+  const yesterday = new Date(); yesterday.setHours(0,0,0,0);
+  yesterday.setDate(yesterday.getDate() - 1);
+  return calcNextDue(rec, yesterday);
+}
+
 // 指定年月の「月末平日のN営業日前」を計算
 function calcEomBusinessDay(year, month, daysBefore) {
   let d = new Date(year, month + 1, 0); // 月末日
@@ -4952,6 +5037,46 @@ function calcNextDue(rec, fromDate) {
       if (result > fromKey) return result;
     }
     return null;
+  } else if (rec.type === 'before_specific_date') {
+    const targetStr = rec.targetDate;
+    if (!targetStr) return null;
+    const targetDate = parseLocalDate(targetStr);
+    if (!targetDate) return null;
+    const daysBefore = parseInt(rec.daysBefore) || 0;
+    const freq = rec.frequency || 'once';
+    // 特定日からN営業日前を計算
+    const calcBeforeNBusiness = (target) => {
+      let d = new Date(target);
+      let remaining = daysBefore;
+      while (remaining > 0) {
+        d.setDate(d.getDate() - 1);
+        if (isBusinessDay(d)) remaining--;
+      }
+      return formatDateKey(d);
+    };
+    if (freq === 'once') {
+      const result = calcBeforeNBusiness(targetDate);
+      return result > fromKey ? result : null;
+    } else if (freq === 'monthly') {
+      const day = targetDate.getDate();
+      for (let i = 0; i < 24; i++) {
+        let target = new Date(baseY, baseM + i, day);
+        if (target.getDate() !== day) target = new Date(baseY, baseM + i + 1, 0);
+        const result = calcBeforeNBusiness(target);
+        if (result > fromKey) return result;
+      }
+      return null;
+    } else if (freq === 'yearly') {
+      const m = targetDate.getMonth();
+      const day = targetDate.getDate();
+      for (let i = 0; i < 5; i++) {
+        let target = new Date(baseY + i, m, day);
+        if (target.getDate() !== day) target = new Date(baseY + i, m + 1, 0);
+        const result = calcBeforeNBusiness(target);
+        if (result > fromKey) return result;
+      }
+      return null;
+    }
   }
   return null;
 }
@@ -5008,6 +5133,9 @@ function openTaskModal(id) {
   document.getElementById('task-recur-yday').value = (rec.type === 'yearly' && rec.dayOfMonth) ? rec.dayOfMonth : 1;
   document.getElementById('task-recur-after').value = rec.daysAfter || 7;
   document.getElementById('task-recur-eom-days').value = (rec.type === 'monthly_eom_business' && rec.daysBeforeEom != null) ? rec.daysBeforeEom : 0;
+  document.getElementById('task-recur-bsd-date').value = (rec.type === 'before_specific_date' && rec.targetDate) ? rec.targetDate : '';
+  document.getElementById('task-recur-bsd-days').value = (rec.type === 'before_specific_date' && rec.daysBefore != null) ? rec.daysBefore : 3;
+  document.getElementById('task-recur-bsd-freq').value = (rec.type === 'before_specific_date' && rec.frequency) ? rec.frequency : 'once';
   document.getElementById('task-recur-shift').checked = !!rec.shiftToWeekday;
   document.getElementById('task-recur-shift-after').checked = !!rec.shiftToWeekdayAfter;
   updateRecurVisibility(rec.type || 'none');
@@ -5147,14 +5275,34 @@ function updateRecurVisibility(type) {
   document.getElementById('recur-yearly-row').style.display = type === 'yearly' ? 'flex' : 'none';
   document.getElementById('recur-after-row').style.display = type === 'after_completion' ? 'block' : 'none';
   document.getElementById('recur-eom-row').style.display = type === 'monthly_eom_business' ? 'block' : 'none';
+  document.getElementById('recur-bsd-row').style.display = type === 'before_specific_date' ? 'block' : 'none';
   // 平日繰上/繰下オプションは毎月・毎年でのみ表示（EOMは元から営業日基準なので不要）
   document.getElementById('recur-shift-row').style.display = (type === 'monthly' || type === 'yearly') ? 'block' : 'none';
 }
+// 「特定日の◯営業日前」の入力から期限日を自動計算
+function autoFillTaskDueFromBSD() {
+  if (document.getElementById('task-recur-type').value !== 'before_specific_date') return;
+  const targetDate = document.getElementById('task-recur-bsd-date').value;
+  if (!targetDate) return;
+  const rec = {
+    type: 'before_specific_date',
+    targetDate,
+    daysBefore: parseInt(document.getElementById('task-recur-bsd-days').value) || 0,
+    frequency: document.getElementById('task-recur-bsd-freq').value || 'once'
+  };
+  const due = calcFirstInstanceForBSD(rec);
+  if (due) document.getElementById('task-due').value = due;
+}
 document.getElementById('task-recur-type').addEventListener('change', e => {
   updateRecurVisibility(e.target.value);
-  // 期限日が入っていれば、毎月/毎年の日付を自動で設定
   const dueRaw = document.getElementById('task-due').value;
-  if (dueRaw) {
+  if (e.target.value === 'before_specific_date') {
+    // 特定日が未入力で期限日が入っていればそれを特定日に流用
+    if (dueRaw && !document.getElementById('task-recur-bsd-date').value) {
+      document.getElementById('task-recur-bsd-date').value = dueRaw;
+    }
+    autoFillTaskDueFromBSD();
+  } else if (dueRaw) {
     const dueD = new Date(dueRaw);
     if (e.target.value === 'monthly') {
       document.getElementById('task-recur-day').value = dueD.getDate();
@@ -5162,6 +5310,14 @@ document.getElementById('task-recur-type').addEventListener('change', e => {
       document.getElementById('task-recur-month').value = dueD.getMonth() + 1;
       document.getElementById('task-recur-yday').value = dueD.getDate();
     }
+  }
+});
+// BSD入力欄の変更を監視 → 期限日を即時更新
+['task-recur-bsd-date', 'task-recur-bsd-days', 'task-recur-bsd-freq'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('change', autoFillTaskDueFromBSD);
+    el.addEventListener('input', autoFillTaskDueFromBSD);
   }
 });
 // 「前へ」「次へ」のチェックボックスは排他制御
@@ -5204,6 +5360,15 @@ document.getElementById('task-save').onclick = () => {
     recurrence = {
       type: 'monthly_eom_business',
       daysBeforeEom: Math.max(0, parseInt(document.getElementById('task-recur-eom-days').value) || 0)
+    };
+  } else if (recType === 'before_specific_date') {
+    const targetDate = document.getElementById('task-recur-bsd-date').value;
+    if (!targetDate) { toast('特定日を入力してください', 'warning'); return; }
+    recurrence = {
+      type: 'before_specific_date',
+      targetDate,
+      daysBefore: Math.max(0, parseInt(document.getElementById('task-recur-bsd-days').value) || 0),
+      frequency: document.getElementById('task-recur-bsd-freq').value || 'once'
     };
   }
   // メモ選択（チェックボックス）から取得
@@ -5286,6 +5451,9 @@ function openEventModal(id, defaultStartDate) {
   document.getElementById('event-recur-month').value = rec.month || 1;
   document.getElementById('event-recur-yday').value = (rec.type === 'yearly' && rec.dayOfMonth) ? rec.dayOfMonth : 1;
   document.getElementById('event-recur-eom-days').value = (rec.type === 'monthly_eom_business' && rec.daysBeforeEom != null) ? rec.daysBeforeEom : 0;
+  document.getElementById('event-recur-bsd-date').value = (rec.type === 'before_specific_date' && rec.targetDate) ? rec.targetDate : '';
+  document.getElementById('event-recur-bsd-days').value = (rec.type === 'before_specific_date' && rec.daysBefore != null) ? rec.daysBefore : 3;
+  document.getElementById('event-recur-bsd-freq').value = (rec.type === 'before_specific_date' && rec.frequency) ? rec.frequency : 'once';
   document.getElementById('event-recur-shift').checked = !!rec.shiftToWeekday;
   document.getElementById('event-recur-shift-after').checked = !!rec.shiftToWeekdayAfter;
   updateEventRecurVisibility(rec.type || 'none');
@@ -5297,13 +5465,32 @@ function updateEventRecurVisibility(type) {
   document.getElementById('event-recur-monthly-row').style.display = type === 'monthly' ? 'block' : 'none';
   document.getElementById('event-recur-yearly-row').style.display = type === 'yearly' ? 'flex' : 'none';
   document.getElementById('event-recur-eom-row').style.display = type === 'monthly_eom_business' ? 'block' : 'none';
+  document.getElementById('event-recur-bsd-row').style.display = type === 'before_specific_date' ? 'block' : 'none';
   document.getElementById('event-recur-shift-row').style.display = (type === 'monthly' || type === 'yearly') ? 'block' : 'none';
+}
+// 「特定日の◯営業日前」の入力から開始日を自動計算（予定）
+function autoFillEventStartFromBSD() {
+  if (document.getElementById('event-recur-type').value !== 'before_specific_date') return;
+  const targetDate = document.getElementById('event-recur-bsd-date').value;
+  if (!targetDate) return;
+  const rec = {
+    type: 'before_specific_date',
+    targetDate,
+    daysBefore: parseInt(document.getElementById('event-recur-bsd-days').value) || 0,
+    frequency: document.getElementById('event-recur-bsd-freq').value || 'once'
+  };
+  const start = calcFirstInstanceForBSD(rec);
+  if (start) document.getElementById('event-start').value = start;
 }
 document.getElementById('event-recur-type').addEventListener('change', e => {
   updateEventRecurVisibility(e.target.value);
-  // 開始日から自動入力
   const startRaw = document.getElementById('event-start').value;
-  if (startRaw) {
+  if (e.target.value === 'before_specific_date') {
+    if (startRaw && !document.getElementById('event-recur-bsd-date').value) {
+      document.getElementById('event-recur-bsd-date').value = startRaw;
+    }
+    autoFillEventStartFromBSD();
+  } else if (startRaw) {
     const sd = new Date(startRaw);
     if (e.target.value === 'monthly') {
       document.getElementById('event-recur-day').value = sd.getDate();
@@ -5311,6 +5498,13 @@ document.getElementById('event-recur-type').addEventListener('change', e => {
       document.getElementById('event-recur-month').value = sd.getMonth() + 1;
       document.getElementById('event-recur-yday').value = sd.getDate();
     }
+  }
+});
+['event-recur-bsd-date', 'event-recur-bsd-days', 'event-recur-bsd-freq'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) {
+    el.addEventListener('change', autoFillEventStartFromBSD);
+    el.addEventListener('input', autoFillEventStartFromBSD);
   }
 });
 document.getElementById('event-recur-shift').addEventListener('change', e => {
@@ -5355,6 +5549,15 @@ document.getElementById('event-save').onclick = () => {
     recurrence = {
       type: 'monthly_eom_business',
       daysBeforeEom: Math.max(0, parseInt(document.getElementById('event-recur-eom-days').value) || 0)
+    };
+  } else if (recType === 'before_specific_date') {
+    const targetDate = document.getElementById('event-recur-bsd-date').value;
+    if (!targetDate) { toast('特定日を入力してください', 'warning'); return; }
+    recurrence = {
+      type: 'before_specific_date',
+      targetDate,
+      daysBefore: Math.max(0, parseInt(document.getElementById('event-recur-bsd-days').value) || 0),
+      frequency: document.getElementById('event-recur-bsd-freq').value || 'once'
     };
   }
   // 平日繰上/繰下が有効なら、初回開始日を自動シフト
