@@ -1814,6 +1814,30 @@ let driveAutoSync = localStorage.getItem('note_drive_auto') === '1';
 let driveSyncTimer = null;
 let driveGapiReady = false;
 
+// ====== 入力中フラグ（Drive自動pullでの入力消失を防ぐ） ======
+let isUserTyping = false;
+let userTypingIdleTimer = null;
+const USER_TYPING_IDLE_MS = 10000; // 最後の入力から10秒で「入力中」を解除
+
+function markUserTyping() {
+  isUserTyping = true;
+  clearTimeout(userTypingIdleTimer);
+  userTypingIdleTimer = setTimeout(() => {
+    isUserTyping = false;
+  }, USER_TYPING_IDLE_MS);
+}
+
+// 編集系の要素にフォーカスがある or 入力直後ならtrue
+function isUserActivelyEditing() {
+  if (isUserTyping) return true;
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
+
 function isDriveConnected() {
   return !!(driveClientId && driveFileId && driveAutoSync);
 }
@@ -1941,6 +1965,12 @@ async function syncToDrive(showToast) {
 
 async function syncFromDrive(showToast) {
   if (!driveClientId || !driveFileId) return;
+  // 自動取得（showToast=false）の場合、入力中なら絶対にスキップ（入力消失防止）
+  // 手動取得（showToast=true）はユーザーの明示操作なので入力中でも実行する
+  if (!showToast && isUserActivelyEditing()) {
+    console.info('Drive 自動取得スキップ: 入力中のためrender()を回避');
+    return;
+  }
   try {
     await ensureValidToken();
     const res = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`, {
@@ -5384,6 +5414,20 @@ document.addEventListener('mousedown', (e) => {
     .forEach(c => c.classList.remove('tc-active'));
 });
 
+// ====== 入力検知のグローバルリスナー（Drive自動pullの上書きを防ぐ） ======
+// テキストボックス・テキストエリア・contentEditable で入力があったら markUserTyping を呼ぶ
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (!t) return;
+  const tag = t.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable) {
+    markUserTyping();
+  }
+}, true);
+// IME（日本語変換）入力中も保護
+document.addEventListener('compositionstart', markUserTyping, true);
+document.addEventListener('compositionupdate', markUserTyping, true);
+
 // ====== 起動 ======
 load();
 updateBadges();
@@ -5401,6 +5445,11 @@ setInterval(checkAutoBackup, 60 * 1000);
 // Drive 同期が有効ならば起動時に取得を試みる（バックグラウンドで実行）
 if (isDriveConnected()) {
   setTimeout(async () => {
+    // 起動直後でも入力中なら取得をスキップ（render()で消えないように）
+    if (isUserActivelyEditing()) {
+      console.info('Drive 初期同期スキップ: 入力中');
+      return;
+    }
     try {
       await ensureValidToken();
       await syncFromDrive(false);
@@ -5408,13 +5457,23 @@ if (isDriveConnected()) {
       console.warn('Drive 初期同期スキップ:', e);
     }
   }, 2000);
-  // 5分ごとに Drive から取得（他PC変更を反映）
-  setInterval(async () => {
-    try {
-      await ensureValidToken();
-      await syncFromDrive(false);
-    } catch (e) {}
-  }, 5 * 60 * 1000);
+  // 5分ごとに Drive から取得（他PC変更を反映）。入力中はスキップして30秒後に再判定
+  const scheduleDrivePull = () => {
+    setTimeout(async () => {
+      if (isUserActivelyEditing()) {
+        // 入力中は取得しない（render()で入力中の文字が消えるのを防ぐ）。30秒後に再判定
+        setTimeout(scheduleDrivePull, 30 * 1000);
+        return;
+      }
+      try {
+        await ensureValidToken();
+        await syncFromDrive(false);
+      } catch (e) {}
+      // 次の5分後を予約
+      scheduleDrivePull();
+    }, 5 * 60 * 1000);
+  };
+  scheduleDrivePull();
 }
 </script>
 </body>
