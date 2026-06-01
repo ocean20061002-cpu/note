@@ -1630,6 +1630,8 @@
     </div>
     <div class="modal-actions">
       <button class="btn btn-danger" id="task-delete" style="display:none">削除</button>
+      <button class="btn" id="task-undo" style="display:none; background:#7f8c8d; color:white;">↶ 未処理に戻す</button>
+      <button class="btn" id="task-complete" style="display:none; background:var(--success); color:white;">✓ 完了</button>
       <button class="btn btn-secondary" id="task-cancel">キャンセル</button>
       <button class="btn btn-primary" id="task-save">保存</button>
     </div>
@@ -3635,6 +3637,15 @@ function renderDoneTasksList() {
       const id = btn.dataset.restore;
       const t = data.tasks.find(x => x.id === id);
       if (!t) return;
+      // undo情報があれば期限・繰り返し・自動作成タスクも復元
+      if (t._undo) {
+        if (t._undo.nextTaskId) {
+          data.tasks = data.tasks.filter(x => x.id !== t._undo.nextTaskId);
+        }
+        if (t._undo.due !== undefined) t.due = t._undo.due;
+        if (t._undo.recurrence) t.recurrence = t._undo.recurrence;
+        delete t._undo;
+      }
       t.status = 'todo';
       delete t.completedAt;
       t.updated = Date.now();
@@ -3642,6 +3653,7 @@ function renderDoneTasksList() {
       toast(`「${t.title}」を未完了に戻しました`, 'success');
       renderDoneTasksList();
       refreshMemoTasksPanel();
+      render();
     };
   });
   // 完全削除ボタン
@@ -3677,13 +3689,24 @@ function bindMemoTasksPanel() {
       const t = data.tasks.find(x => x.id === id);
       if (!t) return;
       if (t.status === 'done') {
-        // 未完了に戻す
+        // 未完了に戻す: undo情報があれば期限・繰り返し・自動作成タスクも復元
+        if (t._undo) {
+          if (t._undo.nextTaskId) {
+            data.tasks = data.tasks.filter(x => x.id !== t._undo.nextTaskId);
+          }
+          if (t._undo.due !== undefined) t.due = t._undo.due;
+          if (t._undo.recurrence) t.recurrence = t._undo.recurrence;
+          delete t._undo;
+        }
         t.status = 'todo';
+        delete t.completedAt;
         t.updated = Date.now();
         toast('未完了に戻しました', 'success');
       } else {
         // 繰り返し設定があれば次回分を作成、なければ単純に完了
+        const oDue = t.due, oStatus = t.status;
         if (!handleRecurrence(t)) {
+          t._undo = { due: oDue, status: oStatus };
           t.status = 'done';
           t.completedAt = Date.now();
           t.updated = Date.now();
@@ -3692,6 +3715,7 @@ function bindMemoTasksPanel() {
       }
       save();
       refreshMemoTasksPanel();
+      render();
     });
   });
   const addBtn = document.getElementById('mtp-add');
@@ -5075,13 +5099,26 @@ function calcNextDue(rec, fromDate) {
 // 次回分は新しいタスクとして複製作成する。新規作成した場合true。
 function handleRecurrence(t) {
   if (!t || !t.recurrence || t.recurrence.type === 'none') return false;
-  const nextDue = calcNextDue(t.recurrence);
+  // 次回日の起点:
+  //   - 「完了から◯日後」(after_completion) は今日基準
+  //   - それ以外（毎月◯日／毎年◯月◯日／月末営業日◯日前／特定日◯営業日前）は、
+  //     期限日が未来なら期限日を起点にして「次月以降」を計算する。
+  //     こうしないと未来の期限を完了した時に同じ日が再生成されてしまう。
+  let fromDate;
+  if (t.recurrence.type !== 'after_completion') {
+    const todayKey = formatDateKey(new Date());
+    if (t.due && t.due >= todayKey) fromDate = t.due;
+  }
+  const nextDue = calcNextDue(t.recurrence, fromDate);
   if (!nextDue) return false;
+  // 完了取消(undo)用に元の状態を保存
+  const oldDue = t.due;
+  const oldRecurrence = t.recurrence;
+  const oldStatus = t.status;
   // 現在のタスクを完了履歴として確定（繰り返しは次のインスタンスへ移譲）
   t.status = 'done';
   t.completedAt = Date.now();
   t.updated = Date.now();
-  const oldRecurrence = t.recurrence;
   t.recurrence = { type: 'none' }; // 完了履歴は再帰しない
   // 次回インスタンスを作成
   const newTask = {
@@ -5098,6 +5135,8 @@ function handleRecurrence(t) {
     updated: Date.now()
   };
   data.tasks.push(newTask);
+  // undo情報を埋め込む（「未処理に戻す」ボタンで使用）
+  t._undo = { due: oldDue, recurrence: oldRecurrence, status: oldStatus, nextTaskId: newTask.id };
   const d = new Date(nextDue);
   toast(`🔄 次回 ${d.getMonth() + 1}/${d.getDate()} の新しいタスクを作成しました`, 'success');
   return true;
@@ -5150,6 +5189,10 @@ function openTaskModal(id) {
   }
   renderTaskDeviceList(initialDeviceIds);
   document.getElementById('task-delete').style.display = id ? 'inline-block' : 'none';
+  // 完了ボタン: 既存タスクで、まだ完了していない場合のみ表示
+  document.getElementById('task-complete').style.display = (id && t.status !== 'done') ? 'inline-block' : 'none';
+  // 未処理に戻すボタン: 完了済み & undo情報が残っている場合のみ表示
+  document.getElementById('task-undo').style.display = (id && t.status === 'done' && t._undo) ? 'inline-block' : 'none';
   document.getElementById('task-modal').classList.add('show');
 }
 // タスク編集モーダル: フォルダ展開状態（モーダル開閉ごとにリセット）
@@ -5420,6 +5463,53 @@ document.getElementById('task-delete').onclick = () => {
   save();
   document.getElementById('task-modal').classList.remove('show');
   toast('タスクを削除しました', 'danger');
+  render();
+};
+// 完了ボタン: 完了タスクを今日の日付に置き、繰り返し設定があれば次回分を別タスクとして作成
+document.getElementById('task-complete').onclick = () => {
+  if (!editingTaskId) return;
+  const t = data.tasks.find(x => x.id === editingTaskId);
+  if (!t) return;
+  const todayKey = formatDateKey(new Date());
+  const originalDue = t.due;
+  const originalStatus = t.status;
+  // 繰り返しがある場合: handleRecurrence が現タスクを完了履歴化＋次回分を新規作成＋_undo保存
+  if (handleRecurrence(t)) {
+    t.due = todayKey;
+  } else {
+    // 繰り返しなし: undo情報を保存して完了化
+    t._undo = { due: originalDue, status: originalStatus };
+    t.status = 'done';
+    t.completedAt = Date.now();
+    t.updated = Date.now();
+    t.due = todayKey;
+    toast('タスクを完了にしました', 'success');
+  }
+  save();
+  pendingTaskMemoId = null;
+  document.getElementById('task-modal').classList.remove('show');
+  render();
+};
+// 未処理に戻すボタン: 完了取消（自動作成された次月タスクも削除）
+document.getElementById('task-undo').onclick = () => {
+  if (!editingTaskId) return;
+  const t = data.tasks.find(x => x.id === editingTaskId);
+  if (!t || !t._undo) return;
+  // 自動作成された次回タスクがあれば削除
+  if (t._undo.nextTaskId) {
+    data.tasks = data.tasks.filter(x => x.id !== t._undo.nextTaskId);
+  }
+  // 元の状態に復元
+  if (t._undo.due !== undefined) t.due = t._undo.due;
+  if (t._undo.recurrence) t.recurrence = t._undo.recurrence;
+  t.status = t._undo.status || 'todo';
+  delete t.completedAt;
+  delete t._undo;
+  t.updated = Date.now();
+  save();
+  toast('未処理に戻しました', 'success');
+  pendingTaskMemoId = null;
+  document.getElementById('task-modal').classList.remove('show');
   render();
 };
 
@@ -6060,6 +6150,18 @@ document.addEventListener('input', (e) => {
 // IME（日本語変換）入力中も保護
 document.addEventListener('compositionstart', markUserTyping, true);
 document.addEventListener('compositionupdate', markUserTyping, true);
+
+// ====== モーダル背景クリックでキャンセル（共通） ======
+// 暗いオーバーレイ部分をクリックしたらキャンセル扱いで閉じる。
+// モーダル本体（.modal）の中身クリックでは閉じない。
+document.querySelectorAll('.modal-bg').forEach(bg => {
+  bg.addEventListener('click', (e) => {
+    if (e.target !== bg) return; // モーダル中身のクリックは無視
+    // タスク編集モーダルの場合: pendingTaskMemoId をクリアしてキャンセル
+    if (bg.id === 'task-modal') pendingTaskMemoId = null;
+    bg.classList.remove('show');
+  });
+});
 
 // ====== 起動 ======
 load();
