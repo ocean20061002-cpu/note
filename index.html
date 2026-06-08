@@ -527,14 +527,38 @@
   .routine-item input[type=checkbox] {
     width: 18px; height: 18px; cursor: pointer; margin: 0;
   }
-  .routine-del {
+  .routine-del, .routine-edit {
     background: none; border: none; cursor: pointer;
-    color: var(--text-muted); font-size: 16px;
-    padding: 0 6px; line-height: 1;
+    color: var(--text-muted); font-size: 14px;
+    padding: 0 4px; line-height: 1;
     visibility: hidden;
   }
-  .routine-item:hover .routine-del { visibility: visible; }
+  .routine-item:hover .routine-del,
+  .routine-item:hover .routine-edit { visibility: visible; }
   .routine-del:hover { color: var(--danger); }
+  .routine-edit:hover { color: var(--accent); }
+  /* ドラッグハンドル（2つ以上ある時のみ表示） */
+  .routine-handle {
+    cursor: grab;
+    color: var(--text-muted);
+    padding: 0 4px;
+    font-size: 14px;
+    user-select: none;
+    visibility: hidden;
+  }
+  .routine-item:hover .routine-handle { visibility: visible; }
+  .routine-handle:active { cursor: grabbing; }
+  .routine-item.dragging { opacity: 0.4; }
+  .routine-item.drag-over { box-shadow: inset 3px 0 0 var(--accent); }
+  /* タイトル編集中のインライン入力 */
+  .routine-edit-input {
+    flex: 1; min-width: 0;
+    padding: 2px 6px;
+    border: 1px solid var(--accent);
+    border-radius: 3px;
+    font-size: 14px;
+    outline: none;
+  }
   .routine-empty {
     color: var(--text-muted); font-size: 13px;
     padding: 6px 8px;
@@ -2529,15 +2553,21 @@ function renderDashboard() {
 function renderRoutines() {
   const todayKey = formatDateKey(new Date());
   const items = data.routines || [];
+  const canReorder = items.length >= 2;
   const itemsHTML = items.length === 0
     ? '<div class="routine-empty">ルーチンがありません。下の入力欄から追加できます。</div>'
     : items.map(r => {
         const checked = r.checkedDate === todayKey;
-        return `<li class="routine-item${checked ? ' done' : ''}">
+        const handle = canReorder
+          ? `<span class="routine-handle" title="ドラッグで並び替え" draggable="false">☰</span>`
+          : '';
+        return `<li class="routine-item${checked ? ' done' : ''}" data-routine-id="${escape(r.id)}"${canReorder ? ' draggable="true"' : ''}>
+          ${handle}
           <label>
             <input type="checkbox" data-routine="${escape(r.id)}"${checked ? ' checked' : ''}>
-            <span>${escape(r.title)}</span>
+            <span class="routine-title">${escape(r.title)}</span>
           </label>
+          <button class="routine-edit" data-routine-edit="${escape(r.id)}" title="名前を変更">✏</button>
           <button class="routine-del" data-routine-del="${escape(r.id)}" title="削除">×</button>
         </li>`;
       }).join('');
@@ -2584,6 +2614,86 @@ function bindRoutineEvents() {
       render();
     });
   });
+  // 編集ボタン: タイトルをインライン編集
+  const startEdit = (id) => {
+    const li = document.querySelector(`.routine-item[data-routine-id="${id}"]`);
+    if (!li) return;
+    const r = (data.routines || []).find(x => x.id === id);
+    if (!r) return;
+    const titleEl = li.querySelector('.routine-title');
+    if (!titleEl || li.querySelector('.routine-edit-input')) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'routine-edit-input';
+    input.value = r.title;
+    input.maxLength = 60;
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+    const finish = (commit) => {
+      const newTitle = (input.value || '').trim();
+      if (commit && newTitle && newTitle !== r.title) {
+        r.title = newTitle;
+        save();
+      }
+      render();
+    };
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    });
+    input.addEventListener('blur', () => finish(true));
+  };
+  document.querySelectorAll('[data-routine-edit]').forEach(btn => {
+    btn.addEventListener('click', () => startEdit(btn.dataset.routineEdit));
+  });
+  // タイトルダブルクリックでも編集モード
+  document.querySelectorAll('.routine-item .routine-title').forEach(el => {
+    el.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      const li = el.closest('.routine-item');
+      if (li) startEdit(li.dataset.routineId);
+    });
+  });
+
+  // ドラッグ＆ドロップで並び替え（2つ以上の時のみ draggable 属性が付く）
+  let dragSrcId = null;
+  document.querySelectorAll('.routine-item[draggable="true"]').forEach(li => {
+    li.addEventListener('dragstart', e => {
+      dragSrcId = li.dataset.routineId;
+      li.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', dragSrcId); } catch (_) {}
+    });
+    li.addEventListener('dragend', () => {
+      li.classList.remove('dragging');
+      document.querySelectorAll('.routine-item.drag-over').forEach(x => x.classList.remove('drag-over'));
+    });
+    li.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      document.querySelectorAll('.routine-item.drag-over').forEach(x => x.classList.remove('drag-over'));
+      if (li.dataset.routineId !== dragSrcId) li.classList.add('drag-over');
+    });
+    li.addEventListener('dragleave', () => {
+      li.classList.remove('drag-over');
+    });
+    li.addEventListener('drop', e => {
+      e.preventDefault();
+      li.classList.remove('drag-over');
+      const targetId = li.dataset.routineId;
+      if (!dragSrcId || dragSrcId === targetId) return;
+      const arr = data.routines;
+      const fromIdx = arr.findIndex(x => x.id === dragSrcId);
+      const toIdx = arr.findIndex(x => x.id === targetId);
+      if (fromIdx < 0 || toIdx < 0) return;
+      const [moved] = arr.splice(fromIdx, 1);
+      arr.splice(toIdx, 0, moved);
+      save();
+      render();
+    });
+  });
+
   const addInput = document.getElementById('routine-add-input');
   const addBtn = document.getElementById('routine-add');
   const doAdd = () => {
