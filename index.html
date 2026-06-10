@@ -4337,6 +4337,69 @@ function bindMemoView() {
       // 末尾の余分な改行と、セル区切りタブ直後の改行を整理
       return result.replace(/\t+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
     };
+    // クリップボード用HTMLの整形：
+    // Google Chat 等は <ul>/<li>/<div>/<p> を「リスト/段落」とみなして中黒や追加改行を入れることがある。
+    // 装飾（太字・色・リンク等）は残しつつ、ブロック要素は <br> に展開してフラット化する。
+    const buildCleanHTMLFragment = (rootNode) => {
+      const INLINE_KEEP = new Set(['B','STRONG','I','EM','U','S','STRIKE','MARK','CODE','SUB','SUP','SMALL','SPAN','FONT','A','BR','IMG']);
+      const BLOCK_TAGS = new Set(['DIV','P','LI','BLOCKQUOTE','H1','H2','H3','H4','H5','H6','TR','PRE','SECTION','ARTICLE','HEADER','FOOTER','NAV','ASIDE']);
+      // テーブルは構造を保持（Excel等で罫線を維持したい場面もあるため例外的に維持）
+      const TABLE_TAGS = new Set(['TABLE','THEAD','TBODY','TFOOT','TR','TD','TH','COLGROUP','COL']);
+      const out = document.createElement('div');
+      const walk = (src, dst, insideTable) => {
+        src.childNodes.forEach(n => {
+          if (n.nodeType === Node.TEXT_NODE) {
+            dst.appendChild(document.createTextNode(n.textContent));
+            return;
+          }
+          if (n.nodeType !== Node.ELEMENT_NODE) return;
+          const tag = n.tagName;
+          // テーブル内はそのまま再帰（構造を維持）
+          if (insideTable || TABLE_TAGS.has(tag)) {
+            const el = document.createElement(tag);
+            // 主要な属性のみ引き継ぐ
+            ['style','colspan','rowspan','align','href','src','alt','width','height'].forEach(a => {
+              if (n.hasAttribute(a)) el.setAttribute(a, n.getAttribute(a));
+            });
+            walk(n, el, true);
+            dst.appendChild(el);
+            return;
+          }
+          // リストの外枠（<ul>/<ol>）は除去し、中身だけを展開
+          if (tag === 'UL' || tag === 'OL') {
+            walk(n, dst, false);
+            // リスト全体の終わりに改行を入れる
+            if (dst.lastChild && dst.lastChild.nodeName !== 'BR') dst.appendChild(document.createElement('br'));
+            return;
+          }
+          // ブロック要素は中身を展開し、末尾に <br> を追加（前のコンテンツがあれば）
+          if (BLOCK_TAGS.has(tag)) {
+            // 直前のノードと続けて表示されないよう、必要なら先頭側にも改行
+            if (dst.lastChild && dst.lastChild.nodeName !== 'BR') {
+              dst.appendChild(document.createElement('br'));
+            }
+            walk(n, dst, false);
+            return;
+          }
+          // インライン要素はそのまま残す（装飾を保持）
+          if (INLINE_KEEP.has(tag)) {
+            const el = document.createElement(tag);
+            ['style','href','target','rel','src','alt','width','height','color','face','size'].forEach(a => {
+              if (n.hasAttribute(a)) el.setAttribute(a, n.getAttribute(a));
+            });
+            walk(n, el, false);
+            dst.appendChild(el);
+            return;
+          }
+          // 未知のタグは中身だけ展開
+          walk(n, dst, false);
+        });
+      };
+      walk(rootNode, out, false);
+      // 連続する <br><br><br>... を最大2つに圧縮、末尾の <br> を除去
+      let html = out.innerHTML.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>').replace(/(<br\s*\/?>\s*)+$/i, '');
+      return html;
+    };
     const handleClipboardCopy = (e, isCut) => {
       const sel = window.getSelection();
       if (!sel || sel.rangeCount === 0) return;
@@ -4346,10 +4409,9 @@ function bindMemoView() {
         const cleanText = htmlToCleanText(fragment);
         if (!cleanText) return;
         e.clipboardData.setData('text/plain', cleanText);
-        // text/html もエディタ内のHTMLをそのまま渡す（リッチ対応のアプリ向け）
-        const tmp = document.createElement('div');
-        tmp.appendChild(fragment.cloneNode(true));
-        e.clipboardData.setData('text/html', tmp.innerHTML);
+        // text/html はサニタイズ後を渡す（リスト/ブロックを <br> に変換）
+        const cleanHTML = buildCleanHTMLFragment(fragment);
+        e.clipboardData.setData('text/html', cleanHTML);
         e.preventDefault();
         if (isCut) {
           // 切り取りの場合は選択範囲を削除（input イベント発火・undo履歴も維持）
