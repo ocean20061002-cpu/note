@@ -4708,7 +4708,7 @@ function bindMemoView() {
 
     // ====== 表セルのリサイズ ======
     const RESIZE_EDGE_COL = 5; // 列リサイズの判定領域
-    const RESIZE_EDGE_ROW = 10; // 行リサイズの判定領域（やや広め：境界線をつかみやすく）
+    const RESIZE_EDGE_ROW = 5; // 行リサイズの判定領域（編集領域を圧迫しないよう5pxに戻し）
     let pendingResize = null; // {mode: 'col'|'row', cell}
     let activeResize = null;
     contentEl.addEventListener('mousemove', e => {
