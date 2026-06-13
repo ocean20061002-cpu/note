@@ -4707,7 +4707,8 @@ function bindMemoView() {
     });
 
     // ====== 表セルのリサイズ ======
-    const RESIZE_EDGE = 5; // 端から何pxの領域をリサイズハンドルにするか
+    const RESIZE_EDGE_COL = 5; // 列リサイズの判定領域
+    const RESIZE_EDGE_ROW = 10; // 行リサイズの判定領域（やや広め：境界線をつかみやすく）
     let pendingResize = null; // {mode: 'col'|'row', cell}
     let activeResize = null;
     contentEl.addEventListener('mousemove', e => {
@@ -4723,12 +4724,20 @@ function bindMemoView() {
       const rect = cell.getBoundingClientRect();
       const distRight = rect.right - e.clientX;
       const distBottom = rect.bottom - e.clientY;
-      if (distRight >= 0 && distRight <= RESIZE_EDGE) {
+      const distTop = e.clientY - rect.top;
+      if (distRight >= 0 && distRight <= RESIZE_EDGE_COL) {
         cell.style.cursor = 'col-resize';
         pendingResize = { mode: 'col', cell };
-      } else if (distBottom >= 0 && distBottom <= RESIZE_EDGE) {
+      } else if (distBottom >= 0 && distBottom <= RESIZE_EDGE_ROW) {
         cell.style.cursor = 'row-resize';
         pendingResize = { mode: 'row', cell };
+      } else if (distTop >= 0 && distTop <= RESIZE_EDGE_ROW && cell.parentElement.previousElementSibling) {
+        // 上端付近 → 直前の行を対象にリサイズ（共有境界線をどちらからもつかめる）
+        const prevRow = cell.parentElement.previousElementSibling;
+        const colIdx = Array.from(cell.parentElement.children).indexOf(cell);
+        const prevCell = prevRow.children[colIdx] || prevRow.children[0];
+        cell.style.cursor = 'row-resize';
+        pendingResize = { mode: 'row', cell: prevCell };
       } else {
         cell.style.cursor = '';
         if (pendingResize && pendingResize.cell === cell) pendingResize = null;
@@ -4737,11 +4746,13 @@ function bindMemoView() {
     contentEl.addEventListener('mousedown', e => {
       if (!pendingResize) return;
       const cell = e.target.closest('td, th');
-      if (!cell || cell !== pendingResize.cell) return;
+      if (!cell) return;
+      // 列リサイズはホバー中のセル＝対象セルが一致している必要あり
+      if (pendingResize.mode === 'col' && cell !== pendingResize.cell) return;
       e.preventDefault();
       e.stopPropagation();
-      if (pendingResize.mode === 'col') startColumnResize(cell, e);
-      else if (pendingResize.mode === 'row') startRowResize(cell, e);
+      if (pendingResize.mode === 'col') startColumnResize(pendingResize.cell, e);
+      else if (pendingResize.mode === 'row') startRowResize(pendingResize.cell, e);
     });
     function startColumnResize(cell, ev) {
       const tbl = cell.closest('table');
@@ -4776,16 +4787,22 @@ function bindMemoView() {
       activeResize = 'row';
       document.body.style.cursor = 'row-resize';
       cell.classList.add('tc-resizing-row');
-      // 行内の各セル内容を .tc-clip でラップ（未ラップなら）。
+      // 行内の各セル内容を .tc-clip でラップ。
       // table-cellは overflow:hidden が効かないため、内側のブロック要素でクリップする。
+      // 既にラッパーがある場合でも、ラッパー外に追加されたコンテンツ（後から入力された要素など）を
+      // 取り込み直してから、セル直下の唯一の子になるよう正規化する。
       const wrappers = Array.from(row.children).map(td => {
         let wrap = td.querySelector(':scope > .tc-clip');
         if (!wrap) {
           wrap = document.createElement('div');
           wrap.className = 'tc-clip';
-          while (td.firstChild) wrap.appendChild(td.firstChild);
-          td.appendChild(wrap);
         }
+        // ラッパー以外の全ての子をラッパーに移動
+        Array.from(td.childNodes).forEach(node => {
+          if (node !== wrap) wrap.appendChild(node);
+        });
+        // ラッパーをセルの唯一の子として配置
+        if (wrap.parentNode !== td) td.appendChild(wrap);
         return wrap;
       });
       function onMove(e) {
